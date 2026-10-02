@@ -1,6 +1,6 @@
-# VISION
+# VISION — torno
 
-> Working name: `<agent-name>` — rename before the first public push.
+> *torno*: Spanish for lathe, from *tornear*, "to turn." The operator controls it; it shapes the work precisely, one turn at a time.
 
 ## Why this project exists
 
@@ -20,6 +20,7 @@ A terminal coding agent, written in TypeScript, that can read, search, edit and 
 - MCP, subagents, hooks or plan mode before Phase 5.
 - Multi-user, server or IDE-plugin modes.
 - Optimising for any single model vendor.
+- Native Windows support. torno targets Linux; on Windows it runs inside WSL2. macOS will probably work but is untested.
 
 ## Working method
 
@@ -41,7 +42,7 @@ Repo, CI, canonical message and event types, `ModelProvider` port, native Anthro
 **Exit:** a test-only script streams a response containing a tool call from a local model via Ollama. The same parser passes contract tests against recorded real Anthropic responses. Ctrl-C mid-stream leaves a consistent state.
 
 ### Phase 2 — Agent
-The agent loop. Tools: `read`, `write`, `edit` (unique-match replacement, read-before-edit), `glob`, `grep`, `bash`. Parallel tool calls, permission prompts with allowlist, turn and `max_tokens` limits, line-based REPL. OpenAI-compatible adapter (covers OpenRouter, DeepSeek, Kimi, local models). **Expect the provider port to change when this second adapter lands.**
+The agent loop. Tools: `read`, `write`, `edit` (unique-match replacement, read-before-edit), `glob`, `grep`, `bash`. Parallel tool calls, permission prompts with allowlist (sandbox level 1), path confinement for file tools (sandbox level 2), turn and `max_tokens` limits, line-based REPL. OpenAI-compatible adapter (covers OpenRouter, DeepSeek, Kimi, local models). **Expect the provider port to change when this second adapter lands.**
 
 **Exit:** the agent completes a small multi-file change in a test repo, with every write and shell command gated by permissions. The loop is covered by `FakeProvider` tests.
 
@@ -70,10 +71,13 @@ Subagents (architect/worker with a cheaper worker model), MCP client, TUI, hooks
 
 - **Budget:** development defaults to `FakeProvider` and local models via Ollama. Paid APIs use prepaid credits with auto-reload off.
 - **Secrets:** API keys live in `.env`, which is git-ignored from the first commit. `.env.example` documents the variables.
+- **Platform:** Linux. Developed inside WSL2 on Windows, with the repo in the Linux filesystem (`~/code/torno`), not under `/mnt/c`. CI runs on Ubuntu.
+- **Sandboxing, applied by phase** (record as ADR-0005):
+  - Phase 2: level 1 (permission prompts) and level 2 (file tools confined to the project root, after resolving `..` and symlinks). Known limitation: `bash` bypasses level 2.
+  - Phase 4: level 4 (Linux container) for eval runs.
+  - Phase 5: level 3 (OS-level sandbox, e.g. bubblewrap or Landlock) evaluated.
+- **License:** MIT. The repo goes public early.
 
 ## Open questions
 
-- Project name.
-- Supported OS for the `bash` tool: macOS/Linux only, or Windows too?
-- Sandboxing for shell commands: permission prompts only, or a container?
-- License.
+- **Where does Ollama run?** Inside WSL2, or on Windows with mirrored networking so `localhost` is shared. Verify the agent can reach it before starting Phase 1.
