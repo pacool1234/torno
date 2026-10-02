@@ -77,7 +77,4 @@ Subagents (architect/worker with a cheaper worker model), MCP client, TUI, hooks
   - Phase 4: level 4 (Linux container) for eval runs.
   - Phase 5: level 3 (OS-level sandbox, e.g. bubblewrap or Landlock) evaluated.
 - **License:** MIT. The repo goes public early.
-
-## Open questions
-
-- **Where does Ollama run?** Inside WSL2, or on Windows with mirrored networking so `localhost` is shared. Verify the agent can reach it before starting Phase 1.
+- **Local models:** Ollama runs inside WSL2. Verify the agent can reach it before starting Phase 1.
