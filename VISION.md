@@ -1,6 +1,6 @@
 # VISION — torno
 
-> *torno*: Spanish for lathe, from *tornear*, "to turn." The operator controls it; it shapes the work precisely, one turn at a time.
+> _torno_: Spanish for lathe, from _tornear_, "to turn." The operator controls it; it shapes the work precisely, one turn at a time.
 
 ## Why this project exists
 
@@ -37,33 +37,38 @@ A terminal coding agent, written in TypeScript, that can read, search, edit and 
 Each phase ends with a working, tested, reviewed state on `main`.
 
 ### Phase 1 — Foundation
+
 Repo, CI, canonical message and event types, `ModelProvider` port, native Anthropic-protocol adapter (streaming, tool-call assembly from partial JSON, retries with backoff, cancellation), `FakeProvider`, per-request usage and cost telemetry.
 
 **Exit:** a test-only script streams a response containing a tool call from a local model via Ollama. The same parser passes contract tests against recorded real Anthropic responses. Ctrl-C mid-stream leaves a consistent state.
 
 ### Phase 2 — Agent
+
 The agent loop. Tools: `read`, `write`, `edit` (unique-match replacement, read-before-edit), `glob`, `grep`, `bash`. Parallel tool calls, permission prompts with allowlist (sandbox level 1), path confinement for file tools (sandbox level 2), turn and `max_tokens` limits, line-based REPL. OpenAI-compatible adapter (covers OpenRouter, DeepSeek, Kimi, local models). **Expect the provider port to change when this second adapter lands.**
 
 **Exit:** the agent completes a small multi-file change in a test repo, with every write and shell command gated by permissions. The loop is covered by `FakeProvider` tests.
 
 ### Phase 3 — Context
+
 Token budget, truncation of large tool outputs, conversation compaction, prompt caching (explicit where the provider needs it), loading a project memory file, saving and resuming sessions.
 
 **Exit:** a long session stays under a configured token budget without losing the task. Cache hits are visible in telemetry.
 
 ### Phase 4 — Eval-ready
+
 Headless mode (`-p "task" --json`), JSONL trajectories (turns, tool calls, tokens, cost, timing), provider pinning for reproducible runs, config file.
 
 **Exit:** a script runs the same task with two models and produces comparable trajectory files.
 
 ### Phase 5 — Power features (open-ended)
+
 Subagents (architect/worker with a cheaper worker model), MCP client, TUI, hooks, plan mode. Prioritised as I go.
 
 ## Success criteria
 
 - I can explain every line in `src/`.
 - `src/core/` has thorough unit tests and imports nothing from `src/adapters/`.
-- At least one phase-5 feature is built *using the agent itself* (dogfooding).
+- At least one phase-5 feature is built _using the agent itself_ (dogfooding).
 - Every significant decision has an ADR.
 - The README shows real numbers (tasks completed, cost per task), not just a feature list.
 

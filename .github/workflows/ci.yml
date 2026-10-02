@@ -1,0 +1,40 @@
+# Runs on every push to main and on every pull request. A change is only
+# reviewed once this is green (REVIEW.md).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    # GitHub's Linux machine: the same OS family torno targets.
+    runs-on: ubuntu-latest
+
+    steps:
+      # Download the repository's code onto the machine.
+      - uses: actions/checkout@v6
+
+      # Install pnpm and Node in one step. pnpm/setup is the successor of
+      # pnpm/action-setup and the one meant for pnpm 11+.
+      # - pnpm's version comes from package.json (devEngines.packageManager,
+      #   written there by pnpm itself), so CI uses exactly the same pnpm as you.
+      # - runtime: Node's major version. Keep it in sync with .nvmrc.
+      # - cache: keep pnpm's package store between runs, so installs are faster.
+      # - install: false, so the install happens in the explicit step below.
+      - uses: pnpm/setup@v1
+        with:
+          runtime: node@24
+          cache: true
+          install: false
+
+      # Install exactly what pnpm-lock.yaml says. If package.json and the lockfile
+      # disagree, fail instead of silently installing different versions.
+      - run: pnpm install --frozen-lockfile
+
+      # The four checks, cheapest-to-understand failures first.
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm format:check
+      - run: pnpm test

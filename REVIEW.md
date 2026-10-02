@@ -18,7 +18,7 @@ Give the reviewer:
 2. The spec or change it implements.
 3. Any ADR the change touches.
 
-Example request: *"Review this diff following REVIEW.md. It implements `<spec>`. Relevant ADRs: 0001, 0003."*
+Example request: _"Review this diff following REVIEW.md. It implements `<spec>`. Relevant ADRs: 0001, 0003."_
 
 ## Rules for the reviewer
 
@@ -31,12 +31,12 @@ Example request: *"Review this diff following REVIEW.md. It implements `<spec>`.
 
 ## Severity levels
 
-| Level | Meaning | Merge? |
-|---|---|---|
-| **Blocker** | Wrong behaviour, data loss, security hole, ADR violation, or untested core behaviour | No |
-| **Should-fix** | Design or maintainability problem with a concrete future cost | Fix now, or record why not |
-| **Nit** | Naming, style, small readability points. At most three per review | Author's choice |
-| **Question** | The reviewer doesn't know whether it's a problem | Answer before merge |
+| Level          | Meaning                                                                              | Merge?                     |
+| -------------- | ------------------------------------------------------------------------------------ | -------------------------- |
+| **Blocker**    | Wrong behaviour, data loss, security hole, ADR violation, or untested core behaviour | No                         |
+| **Should-fix** | Design or maintainability problem with a concrete future cost                        | Fix now, or record why not |
+| **Nit**        | Naming, style, small readability points. At most three per review                    | Author's choice            |
+| **Question**   | The reviewer doesn't know whether it's a problem                                     | Answer before merge        |
 
 ## Checklist, in priority order
 
@@ -48,7 +48,7 @@ Example request: *"Review this diff following REVIEW.md. It implements `<spec>`.
 6. **Security.** Path confinement (ADR-0005), shell commands built by string concatenation, secrets in logs, fixtures or error messages.
 7. **Agent-specific cost risks.** Unbounded loops, missing turn or `max_tokens` limits, large tool output fed into the context unchanged.
 8. **Tests.** Tests check behaviour, not implementation details; they're deterministic (no real time, network or randomness); fixtures are sanitized. List the missing cases, each with the bug it would catch.
-9. **Readability.** Naming, function size, comments that explain *why*. Nits only.
+9. **Readability.** Naming, function size, comments that explain _why_. Nits only.
 
 ## Output format
 

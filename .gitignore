@@ -1,3 +1,15 @@
-.env
+# Dependencies: recreated by `pnpm install`.
 node_modules/
+
+# Build output and test coverage reports: generated, never committed.
 dist/
+coverage/
+
+# Secrets. Ignore every .env variant, but keep the example file, which lists
+# variable names without values.
+.env
+.env.*
+!.env.example
+
+# Logs from crashed processes.
+*.log

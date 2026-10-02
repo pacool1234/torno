@@ -1,0 +1,49 @@
+// tsconfig.json allows comments (it's "JSON with comments"), unlike package.json.
+// tsc never produces JavaScript here: Node runs the .ts files directly by stripping
+// the types (ADR-0002). tsc's only job is checking types (`pnpm typecheck`).
+{
+  "compilerOptions": {
+    // --- What JavaScript we write ----------------------------------------
+    // Node supports modern JavaScript, so nothing needs translating to older syntax.
+    "target": "esnext",
+    // Only the standard JavaScript library. Leaving this unset would also load
+    // browser (DOM) types, letting you use `window` or `document` by mistake.
+    // Node APIs, including `fetch`, come from @types/node instead.
+    "lib": ["esnext"],
+    "types": ["node"],
+
+    // --- Modules ---------------------------------------------------------
+    // Resolve imports exactly the way Node does for an ESM package.
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    // Type-only imports must say `import type`. Node deletes them when stripping,
+    // so this makes it explicit which imports exist only for the compiler.
+    "verbatimModuleSyntax": true,
+
+    // --- Running .ts files directly in Node ------------------------------
+    // tsc only checks; it never writes output files.
+    "noEmit": true,
+    // Imports must include the extension (`./foo.ts`), because Node requires it.
+    // This option lets tsc accept that (it's only allowed together with noEmit).
+    "allowImportingTsExtensions": true,
+    // Reject TypeScript syntax that Node can't simply strip: enums, namespaces
+    // with runtime code, and constructor parameter properties.
+    "erasableSyntaxOnly": true,
+
+    // --- Strictness ------------------------------------------------------
+    "strict": true,
+    // `arr[i]` and `record[key]` are typed as possibly undefined, so you must
+    // handle the missing case. Very useful when parsing streams.
+    "noUncheckedIndexedAccess": true,
+    // A `case` that falls through into the next without `break` is an error.
+    "noFallthroughCasesInSwitch": true,
+    // A subclass method that overrides a parent's must say `override`.
+    "noImplicitOverride": true,
+
+    // --- Speed -----------------------------------------------------------
+    // Don't type-check the .d.ts files inside node_modules: they're not our code,
+    // and checking them is slow.
+    "skipLibCheck": true
+  },
+  "include": ["src", "test"]
+}

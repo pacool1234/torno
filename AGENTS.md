@@ -14,7 +14,8 @@ torno is a terminal coding agent written in TypeScript, built **by hand** as a l
 
 ## Hard rules
 
-- **Do not write or edit files under `src/` or `test/`**, or any config file (`package.json`, `tsconfig.json`, ESLint or Vitest config, CI workflows). The human writes them.
+- **Do not write or edit files under `src/` or `test/`.** The human writes all application code and tests.
+- **Config files may be drafted by the AI** (`package.json`, `tsconfig.json`, ESLint, Prettier, CI workflows, dotfiles). Every non-obvious line gets a comment explaining _why_ it's there; for formats without comments (JSON), the explanation goes alongside in chat. The human reviews each draft, changes what they disagree with, and commits nothing they can't explain line by line.
 - **Do not paste implementation code in chat either.** That is the same thing as writing the file. Allowed code in chat:
   - snippets of at most ~5 lines that illustrate a language feature or a third-party API, using generic names, not torno's own types or functions;
   - pseudocode, only when the human asks for it;
@@ -54,4 +55,11 @@ When the human is stuck, go one step at a time and stop as soon as they're unstu
 
 ## Commands
 
-To be filled in once `package.json` exists (install, typecheck, lint, test).
+| Command                             | What it does                                             |
+| ----------------------------------- | -------------------------------------------------------- |
+| `pnpm install`                      | Install dependencies                                     |
+| `pnpm start`                        | Run torno (`node src/main.ts`, native type stripping)    |
+| `pnpm typecheck`                    | Type-check with `tsc` (Node itself does not check types) |
+| `pnpm lint`                         | ESLint with type information                             |
+| `pnpm format` / `pnpm format:check` | Prettier: rewrite files / only check them (CI)           |
+| `pnpm test` / `pnpm test:watch`     | Vitest: run once (CI) / re-run on every change           |
