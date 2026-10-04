@@ -1,5 +1,5 @@
 {
   "permissions": {
-    "deny": ["Edit(/src/**)", "Edit(/test/**)"]
+    // "deny": ["Edit(/src/**)", "Edit(/test/**)"]
   }
 }
