@@ -4,9 +4,9 @@
 
 ## 1. Conversation model (`src/core/`)
 
-- [ ] 1.1 Write type-level tests for the `conversation-model` scenarios (e.g. with Vitest's `expectTypeOf`, plus `// @ts-expect-error` lines for combinations that must not compile, such as a tool call in a user message) and verify `pnpm typecheck` fails before the types exist
-- [ ] 1.2 Define the message, role and content block types as discriminated unions, and verify `pnpm typecheck` and `pnpm test` pass, including every `@ts-expect-error` line
-- [ ] 1.3 Request review of group 1
+- [x] 1.1 Write type-level tests for the `conversation-model` scenarios (e.g. with Vitest's `expectTypeOf`, plus `// @ts-expect-error` lines for combinations that must not compile, such as a tool call in a user message) and verify `pnpm typecheck` fails before the types exist
+- [x] 1.2 Define the message, role and content block types as discriminated unions, and verify `pnpm typecheck` and `pnpm test` pass, including every `@ts-expect-error` line
+- [x] 1.3 Request review of group 1
 
 ## 2. Port, events and errors (`src/core/ports/`)
 
