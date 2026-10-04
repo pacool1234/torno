@@ -1,5 +1,12 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
-import type { AssistantMessage, Message, Role, ToolCallBlock, ToolResultBlock, UserMessage } from "./conversation.ts";
+import type {
+  AssistantMessage,
+  Message,
+  Role,
+  ToolCallBlock,
+  ToolResultBlock,
+  UserMessage,
+} from "./conversation.ts";
 
 const createMessage = (message: Message): Message => message;
 
