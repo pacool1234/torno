@@ -84,6 +84,8 @@ Retrying after text has already streamed would duplicate output the user has see
 
 **Decision: B.** This change only defines which error kinds count as retryable; the wrapper itself is built in change 4.
 
+_Update 2026-10-05: ADR-0007 defers the wrapper to "Later". The retryable classification stays in this change so the wrapper can use it when it's built._
+
 ### D6. Which content blocks exist in Phase 1 — decided: A
 
 Text, tool calls and tool results are required. The question is reasoning ("thinking") output, which several models produce.
