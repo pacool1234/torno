@@ -25,8 +25,8 @@ A terminal coding agent, written in TypeScript, that can read, search, edit and 
 ## Working method
 
 - **Specs are AI-assisted; decisions are mine.** The AI proposes options with trade-offs. I choose, and record significant choices as ADRs in `docs/adr/`.
-- **Code is written by hand.** The AI may explain APIs, concepts and errors. It does not write implementation code (see `AGENTS.md`).
-- **Tests are written by me**, alongside or before the code. The AI points out missing cases during review.
+- **The AI writes code and tests; I review and understand them.** Every addition is commented thoroughly so that reading it teaches the mechanism (see `AGENTS.md`). Until 2026-10-05 I wrote all code by hand; the rule changed to fit a one-to-two-week timeline.
+- **Tests come with the code**, before it for the core (ADR-0004). The AI proves each new test can fail; I check the cases cover the spec.
 - **CI runs before review.** Typecheck, lint and tests must pass before the AI reviews a change.
 - **AI review follows `REVIEW.md`.** Severity levels (blocker / should-fix / nit), and every comment must name a concrete failure scenario. I may reject comments, with a reason.
 - **Small changes.** Aim for under ~300 lines per review.

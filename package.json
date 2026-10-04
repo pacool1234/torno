@@ -1,7 +1,7 @@
 {
   "name": "torno",
   "version": "1.0.0",
-  "description": "A terminal coding agent, built by hand.",
+  "description": "A terminal coding agent.",
   "private": true,
   "type": "module",
   "license": "MIT",

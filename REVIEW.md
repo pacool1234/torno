@@ -24,7 +24,7 @@ Example request: _"Review this diff following REVIEW.md. It implements `<spec>`.
 
 - **Every comment names a concrete failure scenario:** the input or sequence of events, and the wrong outcome. "This could be cleaner" is not a comment. "If the stream is aborted between `content_block_start` and `content_block_stop`, the partial tool call stays in `pending` and is sent on the next turn" is.
 - **If you can't construct a failure scenario, it's a nit at most, or nothing.** Don't invent problems to look thorough. "No blockers found" is a valid, useful review.
-- **Describe the problem and a direction; don't write the fix.** No replacement code (see `AGENTS.md`). Point to file and line.
+- **Describe the problem and a direction; point to file and line.** Don't put fixes in the review itself, so the author can weigh each comment first. When the author asks, apply the agreed fixes as a separate step (see `AGENTS.md`).
 - **Say when you're unsure.** Mark the comment as a question instead of asserting.
 - **Be consistent.** The same issue gets the same severity every time.
 - **Check the change against the ADRs.** A silent deviation is a blocker even if the code works.

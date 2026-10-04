@@ -1,6 +1,6 @@
 # Tasks
 
-> The human implements every task by hand (AGENTS.md). Within each group, tests come before the code they cover. Request a review (REVIEW.md) at the end of each group: each group is sized to stay under ~300 lines of change.
+> Since 2026-10-05 the AI implements the tasks with thorough comments, and the human reviews each group (AGENTS.md). Within each group, tests come before the code they cover. Request a review (REVIEW.md) at the end of each group: each group is sized to stay under ~300 lines of change.
 
 ## 1. Conversation model (`src/core/`)
 
