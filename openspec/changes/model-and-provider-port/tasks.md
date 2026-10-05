@@ -24,10 +24,10 @@
 
 ## 4. Contract test suite (`test/contract/`)
 
-- [ ] 4.1 Define the four canonical situations the suite needs (text-only answer, text then tool call, failure after some text, never finishing until cancelled) and the factory signature that turns a situation into a provider (design.md, D7). "Failure before the first event" is left out of the suite by ADR-0007: it mattered mainly for the deferred retry wrapper, and is covered by the adapter's own tests
-- [ ] 4.2 Write the suite: one test per `model-provider` scenario that can be expressed through the port; verify it runs against the scripted provider's factory and passes
-- [ ] 4.3 Prove the suite can fail: temporarily break the scripted provider (e.g. emit an event after completion) and verify at least one contract test fails; then revert
-- [ ] 4.4 Request review of group 4
+- [x] 4.1 Define the four canonical situations the suite needs (text-only answer, text then tool call, failure after some text, never finishing until cancelled) and the factory signature that turns a situation into a provider (design.md, D7). "Failure before the first event" is left out of the suite by ADR-0007: it mattered mainly for the deferred retry wrapper, and is covered by the adapter's own tests
+- [x] 4.2 Write the suite: one test per `model-provider` scenario that can be expressed through the port; verify it runs against the scripted provider's factory and passes
+- [x] 4.3 Prove the suite can fail: temporarily break the scripted provider (e.g. emit an event after completion) and verify at least one contract test fails; then revert
+- [x] 4.4 Request review of group 4
 
 ## 5. Close the change
 
