@@ -31,6 +31,6 @@
 
 ## 5. Close the change
 
-- [ ] 5.1 Verify all five scripts pass locally and CI is green on GitHub
-- [ ] 5.2 Run `pnpm exec openspec validate model-and-provider-port --strict` and fix anything it reports
-- [ ] 5.3 Archive the change with `pnpm exec openspec archive model-and-provider-port`, and verify `openspec/specs/` now contains `conversation-model` and `model-provider`
+- [x] 5.1 Verify all five scripts pass locally and CI is green on GitHub
+- [x] 5.2 Run `pnpm exec openspec validate model-and-provider-port --strict` and fix anything it reports
+- [x] 5.3 Archive the change with `pnpm exec openspec archive model-and-provider-port`, and verify `openspec/specs/` now contains `conversation-model` and `model-provider`
