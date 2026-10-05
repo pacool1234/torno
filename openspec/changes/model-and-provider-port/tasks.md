@@ -17,10 +17,10 @@
 
 ## 3. Scripted provider (`src/adapters/providers/fake/`)
 
-- [ ] 3.1 Write tests for the two scripted-provider scenarios (failure after events; waiting for cancellation) and verify they fail
-- [ ] 3.2 Design the script format in words in a short comment block or design note, then implement the scripted provider; verify the tests from 3.1 pass
-- [ ] 3.3 Make the scripted provider report when it has released its resources, so early exit can be observed; verify with a test that breaks out after the first event
-- [ ] 3.4 Request review of group 3
+- [x] 3.1 Write tests for the two scripted-provider scenarios (failure after events; waiting for cancellation) and verify they fail
+- [x] 3.2 Design the script format in words in a short comment block or design note, then implement the scripted provider; verify the tests from 3.1 pass
+- [x] 3.3 Make the scripted provider report when it has released its resources, so early exit can be observed; verify with a test that breaks out after the first event
+- [x] 3.4 Request review of group 3
 
 ## 4. Contract test suite (`test/contract/`)
 
