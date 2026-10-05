@@ -31,7 +31,7 @@ export class ScriptedProvider implements ModelProvider {
   }
 
   stream(request: ProviderRequest): AsyncIterable<StreamEvent> {
-    this.requests.push(request);
+    this.requests.push({ ...request, messages: [...request.messages] });
     const callNumber = this.#nextScript + 1;
     const script = this.#scripts[this.#nextScript];
     this.#nextScript += 1;
@@ -54,11 +54,15 @@ export class ScriptedProvider implements ModelProvider {
         );
       }
 
+      let completed = false;
       for (const event of script.events) {
         throwIfAborted(signal);
         yield event;
+        completed = event.type === "response_completed";
       }
-      throwIfAborted(signal);
+      if (!completed) {
+        throwIfAborted(signal);
+      }
 
       const ending = script.ending ?? { type: "end" };
       switch (ending.type) {

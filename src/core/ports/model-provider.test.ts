@@ -3,6 +3,7 @@ import {
   isRetryable,
   ProviderError,
   type ProviderErrorKind,
+  type ProviderRequest,
   type StopReason,
   type StreamEvent,
 } from "./model-provider.ts";
@@ -59,6 +60,12 @@ describe("ProviderError", () => {
     const error = new ProviderError("protocol", "Invalid tool input", { cause: low });
 
     expect(error.cause).toBe(low);
+  });
+});
+
+describe("Provider request", () => {
+  it("requires at least one message", () => {
+    expectTypeOf<[]>().not.toExtend<ProviderRequest["messages"]>();
   });
 });
 

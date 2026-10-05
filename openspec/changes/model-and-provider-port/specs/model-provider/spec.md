@@ -6,7 +6,7 @@ The contract every model provider satisfies: given a conversation, stream back t
 
 ### Requirement: Provider request
 
-A provider SHALL accept a request containing: a model identifier, optional system instructions, the conversation messages, zero or more tool definitions (each with a name, a description and an input schema), a maximum number of output tokens, and a cancellation signal.
+A provider SHALL accept a request containing: a model identifier, optional system instructions, the conversation messages (at least one; a request without messages SHALL be rejected by the type checker), zero or more tool definitions (each with a name, a description and an input schema), a maximum number of output tokens, and a cancellation signal.
 
 #### Scenario: Request without tools
 
@@ -126,7 +126,7 @@ The error kinds `rate_limit`, `overloaded`, `network` and `timeout` SHALL be cla
 
 ### Requirement: Cancellation
 
-When the request's cancellation signal fires, the provider SHALL stop emitting events and consuming the stream SHALL throw a provider error of kind `aborted`. If the signal has already fired when the request is made, the error SHALL be thrown before any event.
+When the request's cancellation signal fires, the provider SHALL stop emitting events and consuming the stream SHALL throw a provider error of kind `aborted`. If the signal has already fired when the request is made, the error SHALL be thrown before any event. Once the completion event has been delivered, the response is complete: a signal that fires afterwards SHALL NOT cause an error, and the stream SHALL end normally.
 
 #### Scenario: Cancelled mid-response
 
@@ -137,6 +137,11 @@ When the request's cancellation signal fires, the provider SHALL stop emitting e
 
 - **WHEN** a request is made with a signal that has already fired
 - **THEN** consuming the stream throws a provider error of kind `aborted` before any event
+
+#### Scenario: Cancelled after completion
+
+- **WHEN** the signal fires after the completion event was received
+- **THEN** no error is thrown, and the stream ends normally
 
 ### Requirement: Consumer can stop early
 

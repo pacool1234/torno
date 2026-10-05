@@ -105,6 +105,17 @@ The suite can't script a real provider's answers, so it doesn't take a provider 
 
 Rules that only make sense for a real wire format — reassembling fragmented tool arguments, skipping unknown block types — can't be checked through the port with FakeProvider. They're verified in each adapter's own tests (changes 3–4).
 
+_Handover (2026-10-06, from the review of this change):_ these `model-provider` scenarios are not tested by this change, and **must be explicit tasks in the Anthropic adapter change**, tested against recorded responses:
+
+1. Fragments rebuild the text (exact concatenation of the provider's fragments)
+2. No empty fragments (an empty provider fragment emits no event)
+3. Output limit reached (stop reason `max_tokens`)
+4. Unsupported block type (skipped, counted in `skippedBlocks`)
+5. Failure before the first event (`auth`; removed from the contract suite by ADR-0007)
+6. Malformed tool input (`protocol`)
+
+The adapter must also run the shared suite, with its own `*.contract.test.ts` calling `describeModelProviderContract`.
+
 ### Conversation shape — follows ADR-0003, no choice needed
 
 The canonical model follows Anthropic's block-based shape, as ADR-0003 decided. Concretely:

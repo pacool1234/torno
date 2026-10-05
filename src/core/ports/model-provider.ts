@@ -1,4 +1,4 @@
-import type { Message, ToolCallBlock } from "../conversation.ts";
+import type { Message, NonEmptyArray, ToolCallBlock } from "../conversation.ts";
 
 export type ToolDefinition = {
   name: string;
@@ -9,7 +9,7 @@ export type ToolDefinition = {
 export type ProviderRequest = {
   model: string;
   system?: string;
-  messages: readonly Message[];
+  messages: NonEmptyArray<Message>;
   tools: readonly ToolDefinition[];
   maxOutputTokens: number;
   signal: AbortSignal;

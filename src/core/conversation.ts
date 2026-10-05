@@ -21,7 +21,7 @@ export type ContentBlock = TextBlock | ToolCallBlock | ToolResultBlock;
 export type UserContentBlock = TextBlock | ToolResultBlock;
 export type AssistantContentBlock = TextBlock | ToolCallBlock;
 
-type NonEmptyArray<T> = readonly [T, ...T[]];
+export type NonEmptyArray<T> = readonly [T, ...T[]];
 
 export type UserMessage = {
   role: "user";

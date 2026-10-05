@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
+import type { Message } from "../../../core/conversation.ts";
 import {
   ProviderError,
   type ProviderRequest,
   type StreamEvent,
 } from "../../../core/ports/model-provider.ts";
+import { consume } from "../../../../test/helpers/consume.ts";
 import { ScriptedProvider } from "./scripted-provider.ts";
 
 function requestWith(signal: AbortSignal): ProviderRequest {
@@ -24,20 +26,6 @@ const completed: StreamEvent = {
   usage: { inputTokens: 10, outputTokens: 2 },
   skippedBlocks: 0,
 };
-
-async function consume(
-  stream: AsyncIterable<StreamEvent>,
-): Promise<{ events: StreamEvent[]; error: unknown }> {
-  const events: StreamEvent[] = [];
-  try {
-    for await (const event of stream) {
-      events.push(event);
-    }
-    return { events, error: undefined };
-  } catch (error: unknown) {
-    return { events, error };
-  }
-}
 
 describe("ScriptedProvider", () => {
   it("replays a script that ends normally", async () => {
@@ -116,6 +104,34 @@ describe("ScriptedProvider", () => {
     expect(first.events[0]).toEqual(text("first"));
     expect(second.events[0]).toEqual(text("second"));
     expect(provider.requests).toEqual([request, request]);
+  });
+
+  it("records each request as it was when sent, even if the caller's history changes later", async () => {
+    const provider = new ScriptedProvider([{ events: [text("Hi"), completed] }]);
+    const firstMessage: Message = { role: "user", content: [{ type: "text", text: "Hello" }] };
+    const history: [Message, ...Message[]] = [firstMessage];
+
+    await consume(
+      provider.stream({ ...requestWith(new AbortController().signal), messages: history }),
+    );
+    history.push({ role: "assistant", content: [{ type: "text", text: "Hi" }] });
+
+    expect(provider.requests[0]?.messages).toEqual([firstMessage]);
+  });
+
+  it("ends normally when the signal fires after the completion event", async () => {
+    const controller = new AbortController();
+    const provider = new ScriptedProvider([{ events: [text("Hi"), completed] }]);
+
+    const events: StreamEvent[] = [];
+    for await (const event of provider.stream(requestWith(controller.signal))) {
+      events.push(event);
+      if (event.type === "response_completed") {
+        controller.abort();
+      }
+    }
+
+    expect(events).toEqual([text("Hi"), completed]);
   });
 
   it("fails loudly when a test makes more calls than it scripted", async () => {

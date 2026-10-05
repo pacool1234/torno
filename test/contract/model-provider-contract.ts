@@ -5,6 +5,7 @@ import {
   type ProviderRequest,
   type StreamEvent,
 } from "../../src/core/ports/model-provider.ts";
+import { consume } from "../helpers/consume.ts";
 
 export type ContractSituation =
   "text_only" | "text_then_tool_call" | "failure_after_text" | "never_finishes";
@@ -24,20 +25,6 @@ function requestWith(signal: AbortSignal): ProviderRequest {
     maxOutputTokens: 100,
     signal,
   };
-}
-
-async function consume(
-  stream: AsyncIterable<StreamEvent>,
-): Promise<{ events: StreamEvent[]; error: unknown }> {
-  const events: StreamEvent[] = [];
-  try {
-    for await (const event of stream) {
-      events.push(event);
-    }
-    return { events, error: undefined };
-  } catch (error: unknown) {
-    return { events, error };
-  }
 }
 
 async function run(subject: ContractSubject): Promise<{ events: StreamEvent[]; error: unknown }> {
@@ -139,6 +126,22 @@ export function describeModelProviderContract(name: string, factory: ContractFac
         }
       });
 
+      it("never delivers a tool call it didn't announce first", async () => {
+        const { events } = await run(factory("text_then_tool_call"));
+
+        events.forEach((event, index) => {
+          if (event.type !== "tool_call_completed") {
+            return;
+          }
+          const announcedBefore = events
+            .slice(0, index)
+            .some(
+              (earlier) => earlier.type === "tool_call_started" && earlier.id === event.call.id,
+            );
+          expect(announcedBefore).toBe(true);
+        });
+      });
+
       it("delivers the text before the tool call starts", async () => {
         const { events } = await run(factory("text_then_tool_call"));
 
@@ -205,6 +208,28 @@ export function describeModelProviderContract(name: string, factory: ContractFac
         expect(events).toHaveLength(1);
         expect(error).toBeInstanceOf(ProviderError);
         expect(error).toMatchObject({ kind: "aborted" });
+        expect(subject.openResources()).toBe(0);
+      });
+
+      it("cancelled after completion: the stream still ends normally", async () => {
+        const subject = factory("text_only");
+        const controller = new AbortController();
+
+        const events: StreamEvent[] = [];
+        let error: unknown;
+        try {
+          for await (const event of subject.provider.stream(requestWith(controller.signal))) {
+            events.push(event);
+            if (event.type === "response_completed") {
+              controller.abort();
+            }
+          }
+        } catch (caught: unknown) {
+          error = caught;
+        }
+
+        expect(error).toBeUndefined();
+        expectCompletedLast(events);
         expect(subject.openResources()).toBe(0);
       });
     });

@@ -83,6 +83,19 @@ describe("Tool result blocks", () => {
     expect(fileNotFound.isError).toBe(true);
   });
 
+  it("can answer several tool calls in one user message", () => {
+    const secondResult: ToolResultBlock = {
+      type: "tool_result",
+      toolCallId: "call_2",
+      isError: false,
+      result: "export const b = 2;",
+    };
+
+    const message = createMessage({ role: "user", content: [fileNotFound, secondResult] });
+
+    expect(message.content).toEqual([fileNotFound, secondResult]);
+  });
+
   it("is only valid in user messages", () => {
     expectTypeOf<ToolResultBlock>().not.toExtend<AssistantMessage["content"][number]>();
     expectTypeOf<ToolResultBlock>().toExtend<UserMessage["content"][number]>();
