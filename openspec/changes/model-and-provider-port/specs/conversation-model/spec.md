@@ -43,7 +43,7 @@ A tool call block SHALL carry an id, the name of the tool to run, and its input 
 
 ### Requirement: Tool result blocks
 
-A tool result block SHALL carry the id of the tool call it answers, the result content as text, and whether the tool failed. Tool result blocks SHALL only appear in user messages.
+A tool result block SHALL carry the id of the tool call it answers, the result content as text, and whether the result is an error. A result SHALL be marked as an error whenever the model should treat it as one: the tool failed, its input was invalid for the tool, no tool has that name, or the user refused the call. Tool result blocks SHALL only appear in user messages.
 
 #### Scenario: A failed tool result is marked as an error
 

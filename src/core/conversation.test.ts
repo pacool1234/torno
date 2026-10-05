@@ -20,7 +20,7 @@ const readFileCall: ToolCallBlock = {
 const fileNotFound: ToolResultBlock = {
   type: "tool_result",
   toolCallId: "call_1",
-  toolCallFailed: true,
+  isError: true,
   result: "File not found",
 };
 
@@ -80,7 +80,7 @@ describe("Tool result blocks", () => {
   it("marks a failed tool result as an error", () => {
     expect(fileNotFound.toolCallId).toBe("call_1");
     expect(fileNotFound.result).toBe("File not found");
-    expect(fileNotFound.toolCallFailed).toBe(true);
+    expect(fileNotFound.isError).toBe(true);
   });
 
   it("is only valid in user messages", () => {

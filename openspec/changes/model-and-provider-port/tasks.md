@@ -10,10 +10,10 @@
 
 ## 2. Port, events and errors (`src/core/ports/`)
 
-- [ ] 2.1 Write unit tests for the retryable classification (every error kind, both outcomes) and verify they fail
-- [ ] 2.2 Define the request, tool definition, stream event, stop reason and usage types, the error kinds and the provider error, and the `ModelProvider` port; implement the retryable classification; verify the tests from 2.1 pass
-- [ ] 2.3 Verify ESLint's import rule holds: nothing under `src/core/` imports from `src/adapters/` (`pnpm lint` passes)
-- [ ] 2.4 Request review of group 2
+- [x] 2.1 Write unit tests for the retryable classification (every error kind, both outcomes) and verify they fail
+- [x] 2.2 Define the request, tool definition, stream event, stop reason and usage types, the error kinds and the provider error, and the `ModelProvider` port; implement the retryable classification; verify the tests from 2.1 pass
+- [x] 2.3 Verify ESLint's import rule holds: nothing under `src/core/` imports from `src/adapters/` (`pnpm lint` passes)
+- [x] 2.4 Request review of group 2
 
 ## 3. Scripted provider (`src/adapters/providers/fake/`)
 

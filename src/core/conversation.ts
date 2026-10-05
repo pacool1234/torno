@@ -13,7 +13,7 @@ export type ToolCallBlock = {
 export type ToolResultBlock = {
   type: "tool_result";
   toolCallId: string;
-  toolCallFailed: boolean;
+  isError: boolean;
   result: string;
 };
 
