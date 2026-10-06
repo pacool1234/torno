@@ -59,10 +59,10 @@ Split in two reviews (4a, 4b) to stay near the ~300-line size.
 
 ## 6. Configuration and smoke script
 
-- [ ] 6.1 Write tests for the configuration loader's scenarios (defaults, Ollama, invalid base URL without leaking the key); verify they fail
-- [ ] 6.2 Implement the loader with Zod; verify the tests pass
-- [ ] 6.3 Write `scripts/smoke-provider.ts` (`pnpm smoke`): loads the configuration, streams one response with a tool available, and prints each event; run it against Ollama and against Claude Haiku
-- [ ] 6.4 Request review of group 6
+- [x] 6.1 Write tests for the configuration loader's scenarios (defaults, Ollama, invalid base URL without leaking the key); verify they fail
+- [x] 6.2 Implement the loader with Zod; verify the tests pass
+- [x] 6.3 Write `scripts/smoke-provider.ts` (`pnpm smoke`): loads the configuration, streams one response with a tool available, and prints each event; run it against Ollama and against Claude Haiku
+- [x] 6.4 Request review of group 6
 
 ## 7. Close the change
 

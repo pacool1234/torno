@@ -16,7 +16,8 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "record": "node --env-file-if-exists=.env scripts/record-fixture.ts"
+    "record": "node --env-file-if-exists=.env scripts/record-fixture.ts",
+    "smoke": "node --env-file-if-exists=.env scripts/smoke-provider.ts"
   },
   "main": "index.js",
   "keywords": [],
