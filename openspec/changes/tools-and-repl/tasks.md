@@ -14,9 +14,9 @@ Each group is test-first and sized for one review. The AI stops after each group
 
 ## 3. write_file and edit_file
 
-- [ ] 3.1 Write tests: create with parent directories, replace after a read, replace without a read, file changed since read, two edits in a row, unique match, zero and several matches, dollar signs, invalid input, refusals; verify they fail
-- [ ] 3.2 Implement both tools; verify the tests pass
-- [ ] 3.3 Write tests for `summarizeCall` (bash, edit, write create/replace, malformed input as JSON), then implement it
+- [x] 3.1 Write tests: create with parent directories, replace after a read, replace without a read, file changed since read, two edits in a row, unique match, zero and several matches, dollar signs, invalid input, refusals; verify they fail
+- [x] 3.2 Implement both tools; verify the tests pass
+- [x] 3.3 Write tests for `summarizeCall` (bash, edit, write create/replace, malformed input as JSON), then implement it
 
 ## 4. bash
 
