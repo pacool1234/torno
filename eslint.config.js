@@ -42,6 +42,10 @@ export default defineConfig([
   // architecture into something the linter enforces.
   {
     files: ["src/core/**/*.ts"],
+    // Tests are exempt: they may use test doubles that live with the adapters
+    // (ScriptedProvider), which is how ADR-0001 says the loop is tested. The
+    // rule protects what the core depends on at runtime, and tests never ship.
+    ignores: ["src/core/**/*.test.ts"],
     rules: {
       "no-restricted-imports": [
         "error",

@@ -10,8 +10,8 @@ Each group is test-first and sized for one review. The AI stops after each group
 
 ## 2. A turn without tools
 
-- [ ] 2.1 Write tests: text-only answer, the request sent to the model, prompt appended to a trailing user message, empty response, `end_turn` and `other` both ending as `completed`; verify they fail
-- [ ] 2.2 Implement `runTurn` for steps without tools; verify the tests pass
+- [x] 2.1 Write tests: text-only answer, the request sent to the model, prompt appended to a trailing user message, empty response, `end_turn` and `other` both ending as `completed`; verify they fail
+- [x] 2.2 Implement `runTurn` for steps without tools; verify the tests pass
 
 ## 3. Tools and approval
 
