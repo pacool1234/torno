@@ -40,7 +40,12 @@ A tool definition SHALL become `{ "name", "description", "input_schema" }`.
 
 ### Requirement: Event stream parsing
 
-The provider SHALL parse the response body as server-sent events: lines ending in LF or CRLF, events separated by a blank line, `event:` and `data:` fields, several `data:` lines joined with a line break, and lines starting with `:` ignored. Parsing SHALL give the same events however the body is split into chunks, including a split inside a line or inside a multi-byte UTF-8 character.
+A successful response whose `content-type` is not `text/event-stream` SHALL fail with a provider error of kind `protocol` whose message names the content type received, without reading the body as events. The provider SHALL parse the response body as server-sent events: lines ending in LF or CRLF, events separated by a blank line, `event:` and `data:` fields, several `data:` lines joined with a line break, and lines starting with `:` ignored. Parsing SHALL give the same events however the body is split into chunks, including a split inside a line or inside a multi-byte UTF-8 character.
+
+#### Scenario: Not an event stream
+
+- **WHEN** the server answers 200 with `content-type: text/html` (for example, a base URL pointing at a web server)
+- **THEN** consuming the stream throws a provider error of kind `protocol` naming `text/html`, before any event
 
 #### Scenario: Chunk boundaries don't matter
 
@@ -49,7 +54,7 @@ The provider SHALL parse the response body as server-sent events: lines ending i
 
 ### Requirement: Untrusted events are validated
 
-The JSON data of every event the provider uses SHALL be validated against a schema before use. Data that is not valid JSON, or doesn't match the schema of its event type, SHALL fail the stream with a provider error of kind `protocol`. Event types the provider doesn't use (such as `ping`, or types added to the protocol later) SHALL be ignored.
+The JSON data of every event the provider uses SHALL be validated against a schema before use. Data that is not valid JSON, or doesn't match the schema of its event type, SHALL fail the stream with a provider error of kind `protocol`. Event types the provider doesn't use (such as `ping`, or types added to the protocol later) SHALL be ignored. A `content_block_start` for an index whose block is still open SHALL fail the stream with kind `protocol`.
 
 #### Scenario: Malformed event data
 
@@ -60,6 +65,11 @@ The JSON data of every event the provider uses SHALL be validated against a sche
 
 - **WHEN** the stream contains a `ping` event and an event of a type the provider doesn't know, between two text deltas
 - **THEN** both text events are delivered and the stream completes normally
+
+#### Scenario: Block started twice
+
+- **WHEN** a tool call starts at index 0, and another `content_block_start` arrives for index 0 before its `content_block_stop`
+- **THEN** consuming the stream throws a provider error of kind `protocol`
 
 ### Requirement: Text
 

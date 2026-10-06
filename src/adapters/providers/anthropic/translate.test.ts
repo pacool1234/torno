@@ -342,6 +342,25 @@ describe("translateStream: invalid data", () => {
     expect(error).toMatchObject({ kind: "protocol" });
   });
 
+  // Spec scenario "Block started twice". Replacing the open tool call would
+  // lose it: "started" was already emitted, but "completed" never would be.
+  it("fails with protocol when a block starts at an index that is still open", async () => {
+    const { events, error } = await translate([
+      messageStart(),
+      toolStart(0, "toolu_1", "read_file"),
+      textStart(0),
+      blockStop(0),
+      messageDelta("end_turn"),
+      messageStop(),
+    ]);
+
+    // Checked by message too: without that, the test could pass on some
+    // other protocol error (it first did, on missing usage).
+    expect(error).toMatchObject({ kind: "protocol" });
+    expect((error as ProviderError).message).toContain("already open");
+    expect(events.some((event) => event.type === "tool_call_completed")).toBe(false);
+  });
+
   it("fails with protocol when a delta refers to a block that was never started", async () => {
     const events = textAnswer("Hi");
     events[2] = textDelta(7, "Hi");

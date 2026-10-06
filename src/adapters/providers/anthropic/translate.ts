@@ -39,6 +39,12 @@ export async function* translateStream(
 
       case "content_block_start": {
         const { index, content_block: block } = parse(wireEventSchemas.content_block_start, sse);
+        // A second start for an open index would replace that block. If it was
+        // a tool call, its "started" event is already out but "completed" would
+        // never follow, breaking the port's "announced calls arrive" rule.
+        if (blocks.has(index)) {
+          throw protocolError(`content block ${index} started while it is already open`);
+        }
         if (block.type === "text") {
           blocks.set(index, { kind: "text" });
         } else if (block.type === "tool_use") {

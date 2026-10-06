@@ -62,6 +62,16 @@ export class AnthropicProvider implements ModelProvider {
         idle.start();
         throw await httpError(response);
       }
+      const contentType = response.headers.get("content-type");
+      if (!isEventStream(contentType)) {
+        // The body won't be read, so release the connection now rather than
+        // leaving it to garbage collection.
+        await response.body?.cancel().catch(() => undefined);
+        throw new ProviderError(
+          "protocol",
+          `Expected an event stream, but the server sent ${contentType ?? "no content type"}. Is the base URL right?`,
+        );
+      }
       if (response.body === null) {
         throw new ProviderError("protocol", `HTTP ${response.status} response has no body`);
       }
@@ -73,6 +83,16 @@ export class AnthropicProvider implements ModelProvider {
       idle.stop();
     }
   }
+}
+
+// A 200 that isn't an event stream means the base URL points at some other
+// server (a web app's catch-all page, say). Reading it as events would find
+// none and fail as `network`, which callers retry; a wrong server is a setup
+// problem, so it fails as `protocol` here instead. Only the media type is
+// compared: Anthropic adds "; charset=utf-8", and media types are
+// case-insensitive (RFC 9110).
+function isEventStream(contentType: string | null): boolean {
+  return contentType?.split(";")[0]?.trim().toLowerCase() === "text/event-stream";
 }
 
 class IdleTimer {

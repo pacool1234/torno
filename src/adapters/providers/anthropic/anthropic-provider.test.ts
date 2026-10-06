@@ -106,6 +106,47 @@ describe("AnthropicProvider: a successful response", () => {
   });
 });
 
+// Spec scenario "Not an event stream". A 200 that isn't a stream means the
+// base URL points at the wrong server; without this check the parser finds no
+// events and the failure surfaces as a retryable `network` error.
+describe("AnthropicProvider: a response that isn't an event stream", () => {
+  it.each([
+    ["text/html; charset=utf-8", "text/html"],
+    ["application/json", "application/json"],
+    [null, "no content type"],
+  ])(
+    "fails with protocol for content-type %j, naming it, before any event",
+    async (contentType, named) => {
+      const { provider, fake } = providerFor({
+        contentType,
+        chunks: ["<!doctype html><html><body>Vite dev server</body></html>"],
+      });
+
+      const { events, error } = await consume(provider.stream(request()));
+
+      expect(events).toEqual([]);
+      expect(error).toBeInstanceOf(ProviderError);
+      expect(error).toMatchObject({ kind: "protocol" });
+      expect((error as ProviderError).message).toContain(named);
+      // The body is never read, so it must be cancelled explicitly.
+      expect(fake.openBodies()).toBe(0);
+    },
+  );
+
+  // Anthropic sends "text/event-stream; charset=utf-8": parameters after the
+  // media type, and its case, must not matter.
+  it.each(["text/event-stream; charset=utf-8", "Text/Event-Stream"])(
+    "accepts %j",
+    async (contentType) => {
+      const { provider } = providerFor({ contentType, chunks: okBody });
+
+      const { error } = await consume(provider.stream(request()));
+
+      expect(error).toBeUndefined();
+    },
+  );
+});
+
 describe("AnthropicProvider: HTTP errors", () => {
   const errorBody = (type: string, message: string) =>
     JSON.stringify({ type: "error", error: { type, message }, request_id: "req_1" });

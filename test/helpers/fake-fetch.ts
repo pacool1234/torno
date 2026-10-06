@@ -5,6 +5,8 @@ export type FakeResponse = {
   connectionError?: boolean;
   noResponse?: boolean;
   chunkDelayMs?: number;
+  // The response's content-type; null sends none. Defaults to an event stream.
+  contentType?: string | null;
 };
 
 export type RecordedCall = {
@@ -110,7 +112,10 @@ export function fakeFetch(...responses: FakeResponse[]): FakeFetch {
 
     return new Response(body, {
       status: answer.status ?? 200,
-      headers: { "content-type": "text/event-stream" },
+      headers:
+        answer.contentType === null
+          ? {}
+          : { "content-type": answer.contentType ?? "text/event-stream" },
     });
   };
 
