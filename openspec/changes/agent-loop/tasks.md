@@ -31,6 +31,6 @@ Each group is test-first and sized for one review. The AI stops after each group
 
 ## 6. Close the change
 
-- [ ] 6.1 Run the full `REVIEW.md` review of the change and resolve its findings
+- [x] 6.1 Run the full `REVIEW.md` review of the change and resolve its findings: the "cancelled after the final answer" scenario, the tool result cap (ADR-0008), and the nits
 - [ ] 6.2 Verify all scripts pass locally and CI is green on GitHub
 - [ ] 6.3 Run `pnpm exec openspec validate agent-loop --strict`, archive the change, and format the archived specs

@@ -62,7 +62,7 @@ Recorded so they aren't forgotten; each needs a new ADR before it starts.
 
 - OpenAI-compatible adapter (OpenRouter, DeepSeek, Kimi, local models), the second real test of the provider port (ADR-0003).
 - Retry wrapper with backoff (design D5 of `model-and-provider-port`).
-- Context management: truncation of large tool outputs, compaction, sessions, project memory file.
+- Context management: smarter truncation of tool outputs (a hard cap exists, ADR-0008), compaction, sessions, project memory file.
 - Permission allowlist; parallel tool execution; `glob` and `grep` tools.
 - Container sandbox for eval runs (level 4) and an OS-level sandbox (level 3).
 - Subagents, MCP client, TUI, hooks, plan mode.

@@ -17,12 +17,7 @@ import type {
   ToolResultBlock,
   UserContentBlock,
 } from "./conversation.ts";
-import {
-  ProviderError,
-  type ProviderRequest,
-  type StopReason,
-  type Usage,
-} from "./ports/model-provider.ts";
+import { ProviderError, type ProviderRequest, type StopReason } from "./ports/model-provider.ts";
 import type { ApprovalDecision } from "./ports/approver.ts";
 import type { Tool, ToolOutput } from "./ports/tool.ts";
 
@@ -33,6 +28,15 @@ const DENIED = "The user denied this tool call.";
 const NOT_RUN_OUTPUT_LIMIT = "Not run: the response hit the output limit.";
 const NOT_RUN_CANCELLED = "Not run: the user cancelled.";
 
+// ADR-0008: the most of one tool result the model gets to see. About 7,500
+// tokens; a result over it keeps its head and its tail, half each.
+const MAX_RESULT_CHARS = 30_000;
+const KEPT_EACH_SIDE = MAX_RESULT_CHARS / 2;
+
+// Consumers must read until `turn_ended`: it's the only place the updated
+// conversation comes out. To stop a turn early, abort the signal; breaking
+// out of the `for await` instead stops the loop at its current event, and the
+// conversation of that turn is lost.
 export async function* runTurn(
   config: AgentConfig,
   conversation: readonly Message[],
@@ -42,6 +46,13 @@ export async function* runTurn(
   // A fresh array the loop may push to. The caller's array is never touched
   // (design D1: the caller owns its conversation and keeps the one returned).
   const messages: Message[] = withPrompt(conversation, prompt);
+
+  // With maxSteps below 1 the loop would still make one request, breaking
+  // "at most maxSteps". An impossible setting is a bug in the caller's
+  // configuration, so it throws (design D1) before anything is sent.
+  if (!Number.isInteger(config.maxSteps) || config.maxSteps < 1) {
+    throw new RangeError(`maxSteps must be a whole number of at least 1, got ${config.maxSteps}`);
+  }
 
   // Looked up by name for every call; built once per turn.
   const tools = new Map(config.tools.map((tool) => [tool.definition.name, tool]));
@@ -62,7 +73,7 @@ export async function* runTurn(
       // turn as a reason. Nothing from this step has been added to
       // `messages` yet, so the step in progress is dropped and every finished
       // step stays (design D2). No retry (ADR-0007): the user decides.
-      // Anything else is a bug and propagates.
+      //
       // A cancellation surfaces from the provider as kind "aborted". The
       // signal is checked too: if Ctrl-C raced with a network error, the user
       // still asked to stop, so the turn ends as cancelled, not failed.
@@ -74,6 +85,7 @@ export async function* runTurn(
         yield { type: "turn_ended", reason: "failed", error, conversation: messages };
         return;
       }
+      // Anything else is a bug, and bugs propagate.
       throw error;
     }
 
@@ -164,7 +176,9 @@ async function* runCall(
     type: "tool_result",
     toolCallId: call.id,
     isError: output.isError,
-    result: output.result,
+    // Every result a tool produces passes through here, so this one line is
+    // the backstop for all tools, present and future (ADR-0008).
+    result: capResult(output.result),
   });
 
   const tool = tools.get(call.toolName);
@@ -224,6 +238,41 @@ async function* runCall(
   return result;
 }
 
+// Shortens a result over MAX_RESULT_CHARS to its head and tail (ADR-0008).
+// Head and tail rather than just the head: a build or test log usually ends
+// with the part that matters, the error or the summary.
+function capResult(result: string): string {
+  if (result.length <= MAX_RESULT_CHARS) {
+    return result;
+  }
+  // JavaScript strings are sequences of UTF-16 code units, and `length` and
+  // `slice` count those units. Characters outside the Basic Multilingual Plane
+  // (most emoji) take two units, a "surrogate pair". Cutting between the two
+  // leaves half a character, which isn't valid text, so each cut moves one
+  // unit outward to keep a pair whole on the side that's dropped.
+  let headEnd = KEPT_EACH_SIDE;
+  if (isHighSurrogate(result.charCodeAt(headEnd - 1))) {
+    headEnd -= 1;
+  }
+  let tailStart = result.length - KEPT_EACH_SIDE;
+  if (isLowSurrogate(result.charCodeAt(tailStart))) {
+    tailStart += 1;
+  }
+  const omitted = tailStart - headEnd;
+  // The note is written for the model, so it can ask for less next time.
+  return `${result.slice(0, headEnd)}\n\n[... ${omitted} characters left out ...]\n\n${result.slice(tailStart)}`;
+}
+
+// The first unit of a surrogate pair is in 0xD800–0xDBFF, the second in
+// 0xDC00–0xDFFF; no ordinary character uses those values.
+function isHighSurrogate(unit: number): boolean {
+  return unit >= 0xd800 && unit <= 0xdbff;
+}
+
+function isLowSurrogate(unit: number): boolean {
+  return unit >= 0xdc00 && unit <= 0xdfff;
+}
+
 // Adds the prompt so that roles keep alternating (design D2). After a turn
 // that stopped early, the conversation can end with a user message (tool
 // results, or a prompt the model never answered); a second user message in a
@@ -243,7 +292,6 @@ function withPrompt(conversation: readonly Message[], prompt: string): Message[]
 type StepResponse = {
   content: AssistantContentBlock[];
   stopReason: StopReason;
-  usage: Usage;
 };
 
 // One model request. Forwards what streams back as agent events, and builds
@@ -306,7 +354,7 @@ async function* streamStep(
           skippedBlocks: event.skippedBlocks,
         };
         // The port guarantees nothing follows the completion, so stop here.
-        return { content, stopReason: event.stopReason, usage: event.usage };
+        return { content, stopReason: event.stopReason };
       default: {
         const unhandled: never = event;
         throw new Error(`Unhandled stream event: ${JSON.stringify(unhandled)}`);

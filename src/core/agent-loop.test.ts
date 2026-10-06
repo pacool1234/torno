@@ -839,6 +839,74 @@ describe("runTurn: cancellation", () => {
   });
 });
 
+// ADR-0008: one huge tool result must not make every later request too long
+// for the model, so the loop caps results, keeping the head and the tail.
+describe("runTurn: tool results are capped", () => {
+  async function resultFor(output: string) {
+    const bash = new ScriptedTool("bash", { run: () => ({ result: output, isError: false }) });
+    const { provider, config } = setup([askFor(call("c1", "bash")), answer()], { tools: [bash] });
+    const { events } = await run(config, "Hi");
+    const finished = events.find((event) => event.type === "tool_finished");
+    const sent = resultsMessage(provider.requests[1])?.content[0];
+    // The event and the request carry the same capped text: the REPL shows
+    // exactly what the model saw.
+    expect(sent).toEqual(finished?.result);
+    return finished?.result.result ?? "";
+  }
+
+  // Spec scenario "Large output". Three distinct letters, so the test can see
+  // which parts were kept and which were cut.
+  it("keeps the first and last 15,000 characters of a longer result, with a note", async () => {
+    const output = "A".repeat(15_000) + "M".repeat(70_000) + "Z".repeat(15_000);
+
+    const result = await resultFor(output);
+
+    expect(result.startsWith("A".repeat(15_000))).toBe(true);
+    expect(result.endsWith("Z".repeat(15_000))).toBe(true);
+    expect(result).not.toContain("M");
+    expect(result).toContain("70000 characters left out");
+  });
+
+  it.each([
+    ["exactly at the cap", 30_000],
+    ["under the cap", 12],
+  ])("leaves a result %s unchanged", async (_name, length) => {
+    const output = "x".repeat(length);
+
+    expect(await resultFor(output)).toBe(output);
+  });
+
+  it("caps a result one character over the cap", async () => {
+    expect(await resultFor("x".repeat(30_001))).toContain("1 characters left out");
+  });
+
+  // Spec scenario "Emoji at the cut". "😀" is two UTF-16 code units (a
+  // surrogate pair); cutting between them leaves half a character, which
+  // isn't valid text and may be rejected when sent to the model.
+  it.each([
+    ["the head's end", "a".repeat(14_999) + "😀" + "b".repeat(100_000)],
+    ["the tail's start", "a".repeat(100_000) + "😀" + "b".repeat(14_999)],
+  ])("never splits a surrogate pair at %s", async (_name, output) => {
+    const result = await resultFor(output);
+
+    const loneSurrogate = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u;
+    expect(loneSurrogate.test(result)).toBe(false);
+  });
+});
+
+// Review nit: maxSteps below 1 would still make one request, breaking "at
+// most maxSteps". It's a configuration bug, so it throws (design D1).
+describe("runTurn: configuration", () => {
+  it.each([0, -1, 1.5])("rejects maxSteps %s", async (maxSteps) => {
+    const { provider, config } = setup([answer()], { maxSteps });
+
+    const { error } = await consume(runTurn(config, [], "Hi", new AbortController().signal));
+
+    expect(error).toBeInstanceOf(RangeError);
+    expect(provider.requests).toEqual([]);
+  });
+});
+
 // Spec scenario "Every ending" (task 5.3). `lastTurnEnded` checks the
 // invariant on every run in this file already; this table states it in one
 // place, and makes sure each reason really is reached by some setup. Each

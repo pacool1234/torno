@@ -64,3 +64,4 @@ Alternative: continue automatically after `max_tokens` and ask the user at the s
 - A response with no text and no tool calls adds nothing to the conversation (an assistant message can't be empty) and ends the turn.
 - A provider error of kind `aborted`, or the signal being aborted at any check point, ends the turn as `cancelled`, not `failed`.
 - Tools validate their own input (ADR-0002); the loop passes the parsed object through.
+- Added by the change's review: tool results are capped at 30,000 characters, head and tail kept (ADR-0008), and `maxSteps` below 1 is rejected as a configuration bug.

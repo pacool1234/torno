@@ -91,7 +91,7 @@ A provider error other than `aborted` SHALL end the turn with reason `failed` an
 
 ### Requirement: Cancellation
 
-The turn's signal SHALL reach the provider, the approver and the running tool. When it aborts, the turn SHALL end with reason `cancelled`, with no further model request or tool run. A response that hadn't completed SHALL be dropped. If the stop happens while a step's tools run, the running tool's outcome SHALL be recorded as its result, and every call not yet run SHALL get the error result "Not run: the user cancelled."
+The turn's signal SHALL reach the provider, the approver and the running tool. When it aborts before the model has ended its turn, the turn SHALL end with reason `cancelled`, with no further model request or tool run. Once the model has ended its turn (a final response with no tool calls to run), a later abort SHALL NOT change the reason: there is nothing left to cancel. A response that hadn't completed SHALL be dropped. If the stop happens while a step's tools run, the running tool's outcome SHALL be recorded as its result, and every call not yet run SHALL get the error result "Not run: the user cancelled."
 
 #### Scenario: Cancelled while streaming
 
@@ -103,10 +103,29 @@ The turn's signal SHALL reach the provider, the approver and the running tool. W
 - **WHEN** a step asks for calls A and B, and the signal aborts while A runs
 - **THEN** A receives the aborted signal, A's outcome is its result, B doesn't run and gets the "Not run" result, and no further model request is made
 
+#### Scenario: Cancelled after the final answer
+
+- **WHEN** the model completes with `end_turn`, and the signal aborts while the "step completed" event is being handled
+- **THEN** the turn ends with reason `completed`, keeping the answer
+
 #### Scenario: Cancelled at the approval prompt
 
 - **WHEN** the signal aborts while the approver is being asked about call A
 - **THEN** A doesn't run, A and every later call get the "Not run" result, and the turn ends with reason `cancelled`
+
+### Requirement: Tool results are capped
+
+A tool result longer than 30,000 characters SHALL be shortened to its first 15,000 and last 15,000 characters, with a note between them giving the number of characters left out (ADR-0008). The cut SHALL NOT split a UTF-16 surrogate pair. The capped result SHALL be the one sent to the model and the one in the "tool finished" event.
+
+#### Scenario: Large output
+
+- **WHEN** a tool returns 100,000 characters
+- **THEN** its result starts with the output's first 15,000 characters, ends with its last 15,000, and the note between them says 70,000 characters were left out
+
+#### Scenario: Emoji at the cut
+
+- **WHEN** a tool's long output has a surrogate pair straddling the head's last position
+- **THEN** the result contains no unpaired surrogate
 
 ### Requirement: The returned conversation is valid
 
