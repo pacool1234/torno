@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ProviderError,
   type ProviderErrorKind,
@@ -188,5 +188,231 @@ describe("AnthropicProvider: network failures", () => {
     expect(events).toEqual([{ type: "text_delta", text: "Hello" }]);
     expect(error).toBeInstanceOf(ProviderError);
     expect(error).toMatchObject({ kind: "network" });
+  });
+});
+
+function providerWithTimeout(idleTimeoutMs: number, ...responses: FakeResponse[]) {
+  const fake = fakeFetch(...responses);
+  const provider = new AnthropicProvider({
+    baseUrl: "https://api.anthropic.com",
+    fetch: fake.fetch,
+    idleTimeoutMs,
+  });
+  return { provider, fake };
+}
+
+function track<T>(promise: Promise<T>): { settled: boolean } {
+  const state = { settled: false };
+  void promise.finally(() => {
+    state.settled = true;
+  });
+  return state;
+}
+
+describe("AnthropicProvider: cancellation", () => {
+  it("fails with aborted before any event when the signal has already fired", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const { provider, fake } = providerFor({ chunks: okBody });
+
+    const { events, error } = await consume(
+      provider.stream(request({ signal: controller.signal })),
+    );
+
+    expect(events).toEqual([]);
+    expect(error).toBeInstanceOf(ProviderError);
+    expect(error).toMatchObject({ kind: "aborted" });
+    expect(fake.openBodies()).toBe(0);
+  });
+
+  it("fails with aborted when cancelled while waiting for the response", async () => {
+    const controller = new AbortController();
+    const { provider } = providerFor({ noResponse: true });
+
+    const result = consume(provider.stream(request({ signal: controller.signal })));
+    controller.abort();
+    const { events, error } = await result;
+
+    expect(events).toEqual([]);
+    expect(error).toMatchObject({ kind: "aborted" });
+  });
+
+  it("stops mid-stream with aborted, delivering nothing more", async () => {
+    const controller = new AbortController();
+    const { provider, fake } = providerFor({ chunks: okBody.slice(0, 3), end: "hang" });
+
+    const events: unknown[] = [];
+    let error: unknown;
+    try {
+      for await (const event of provider.stream(request({ signal: controller.signal }))) {
+        events.push(event);
+        controller.abort();
+      }
+    } catch (caught: unknown) {
+      error = caught;
+    }
+
+    expect(events).toEqual([{ type: "text_delta", text: "Hello" }]);
+    expect(error).toBeInstanceOf(ProviderError);
+    expect(error).toMatchObject({ kind: "aborted" });
+    expect(fake.openBodies()).toBe(0);
+  });
+});
+
+describe("AnthropicProvider: idle timeout", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("fails with timeout when the response doesn't arrive in time", async () => {
+    const { provider } = providerWithTimeout(1000, { noResponse: true });
+
+    const result = consume(provider.stream(request()));
+    const state = track(result);
+    await vi.advanceTimersByTimeAsync(999);
+    expect(state.settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    const { events, error } = await result;
+
+    expect(events).toEqual([]);
+    expect(error).toBeInstanceOf(ProviderError);
+    expect(error).toMatchObject({ kind: "timeout" });
+  });
+
+  it("fails with timeout when the body stalls, keeping the events already delivered", async () => {
+    const { provider, fake } = providerWithTimeout(1000, {
+      chunks: okBody.slice(0, 3),
+      end: "hang",
+    });
+
+    const result = consume(provider.stream(request()));
+    const state = track(result);
+    await vi.advanceTimersByTimeAsync(999);
+    expect(state.settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    const { events, error } = await result;
+
+    expect(events).toEqual([{ type: "text_delta", text: "Hello" }]);
+    expect(error).toMatchObject({ kind: "timeout" });
+    expect(fake.openBodies()).toBe(0);
+  });
+
+  it("lets a slow stream finish as long as each chunk arrives in time", async () => {
+    const { provider } = providerWithTimeout(1000, { chunks: okBody, chunkDelayMs: 600 });
+
+    const result = consume(provider.stream(request()));
+    await vi.advanceTimersByTimeAsync(4000);
+    const { events, error } = await result;
+
+    expect(error).toBeUndefined();
+    expect(events.at(-1)).toMatchObject({ type: "response_completed" });
+  });
+
+  it("doesn't count the time the consumer spends handling an event", async () => {
+    const { provider } = providerWithTimeout(1000, { chunks: okBody });
+
+    const events: unknown[] = [];
+    for await (const event of provider.stream(request())) {
+      events.push(event);
+      await vi.advanceTimersByTimeAsync(5000);
+    }
+
+    expect(events.at(-1)).toMatchObject({ type: "response_completed" });
+  });
+
+  it("waits 60 seconds by default", async () => {
+    const { provider } = providerFor({ noResponse: true });
+
+    const result = consume(provider.stream(request()));
+    const state = track(result);
+    await vi.advanceTimersByTimeAsync(59_999);
+    expect(state.settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect((await result).error).toMatchObject({ kind: "timeout" });
+  });
+});
+
+describe("AnthropicProvider: releasing resources", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it.each<
+    [
+      string,
+      () => { response: FakeResponse; run: (stream: AsyncIterable<unknown>) => Promise<unknown> },
+    ]
+  >([
+    ["completion", () => ({ response: { chunks: okBody }, run: consume })],
+    ["an HTTP error", () => ({ response: { status: 500, chunks: ["oops"] }, run: consume })],
+    [
+      "a protocol error mid-body",
+      () => ({
+        response: { chunks: [...okBody.slice(0, 3), "event: message_delta\ndata: {not json\n\n"] },
+        run: consume,
+      }),
+    ],
+    [
+      "a broken body",
+      () => ({ response: { chunks: okBody.slice(0, 3), end: "error" }, run: consume }),
+    ],
+    [
+      "the consumer stopping after the first event",
+      () => ({
+        response: { chunks: okBody },
+        run: async (stream) => {
+          for await (const event of stream) {
+            void event;
+            break;
+          }
+        },
+      }),
+    ],
+  ])("after %s, no body is open and no timer is running", async (_ending, setup) => {
+    const { response, run } = setup();
+    const { provider, fake } = providerWithTimeout(1000, response);
+
+    await run(provider.stream(request()));
+
+    expect(fake.openBodies()).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("after a timeout, no body is open and no timer is running", async () => {
+    const { provider, fake } = providerWithTimeout(1000, {
+      chunks: okBody.slice(0, 3),
+      end: "hang",
+    });
+
+    const result = consume(provider.stream(request()));
+    await vi.advanceTimersByTimeAsync(1000);
+    await result;
+
+    expect(fake.openBodies()).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("after a cancellation, no body is open and no timer is running", async () => {
+    const controller = new AbortController();
+    const { provider, fake } = providerWithTimeout(1000, {
+      chunks: okBody.slice(0, 3),
+      end: "hang",
+    });
+
+    for await (const event of provider.stream(request({ signal: controller.signal }))) {
+      void event;
+      controller.abort();
+      break;
+    }
+
+    expect(fake.openBodies()).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

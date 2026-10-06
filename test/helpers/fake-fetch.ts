@@ -3,6 +3,8 @@ export type FakeResponse = {
   chunks?: (string | Uint8Array)[];
   end?: "close" | "error" | "hang";
   connectionError?: boolean;
+  noResponse?: boolean;
+  chunkDelayMs?: number;
 };
 
 export type RecordedCall = {
@@ -23,7 +25,7 @@ export function fakeFetch(...responses: FakeResponse[]): FakeFetch {
   let open = 0;
   const encoder = new TextEncoder();
 
-  const respond = (input: string | URL | Request, init?: RequestInit): Response => {
+  const respond = (input: string | URL | Request, init?: RequestInit): Response | undefined => {
     calls.push({
       url: input instanceof Request ? input.url : input.toString(),
       method: init?.method,
@@ -42,6 +44,9 @@ export function fakeFetch(...responses: FakeResponse[]): FakeFetch {
     }
     if (answer.connectionError === true) {
       throw new TypeError("fetch failed", { cause: new Error("connect ECONNREFUSED") });
+    }
+    if (answer.noResponse === true) {
+      return undefined;
     }
 
     const chunks = (answer.chunks ?? []).map((chunk) =>
@@ -75,7 +80,13 @@ export function fakeFetch(...responses: FakeResponse[]): FakeFetch {
             signal.addEventListener("abort", onAbort, { once: true });
           }
         },
-        pull(controller) {
+        async pull(controller) {
+          if (answer.chunkDelayMs !== undefined) {
+            await new Promise((resolve) => setTimeout(resolve, answer.chunkDelayMs));
+            if (finished) {
+              return;
+            }
+          }
           const chunk = chunks[next];
           if (chunk !== undefined) {
             next += 1;
@@ -104,8 +115,24 @@ export function fakeFetch(...responses: FakeResponse[]): FakeFetch {
   };
 
   const fake = (input: string | URL | Request, init?: RequestInit): Promise<Response> =>
-    new Promise((resolve) => {
-      resolve(respond(input, init));
+    new Promise((resolve, reject) => {
+      const response = respond(input, init);
+      if (response !== undefined) {
+        resolve(response);
+        return;
+      }
+      const signal = init?.signal;
+      signal?.addEventListener(
+        "abort",
+        () => {
+          reject(
+            signal.reason instanceof Error
+              ? signal.reason
+              : new DOMException("This operation was aborted", "AbortError"),
+          );
+        },
+        { once: true },
+      );
     });
 
   return { fetch: fake, calls, openBodies: () => open };

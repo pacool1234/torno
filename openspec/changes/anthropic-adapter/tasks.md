@@ -45,9 +45,9 @@ Split in two reviews (4a, 4b) to stay near the ~300-line size.
 
 ### 4b. Cancellation, idle timeout and releasing resources
 
-- [ ] 4.5 Write tests for: a signal fired before the request and mid-stream as `aborted`; the idle timeout while waiting for headers and between chunks, and its reset by data (fake timers, no real waiting); the body cancelled and the timer cleared on every way the stream can end. Verify they fail
-- [ ] 4.6 Add cancellation mapping, the idle timeout and resource release to `AnthropicProvider`; verify the tests pass
-- [ ] 4.7 Request review of group 4b
+- [x] 4.5 Write tests for: a signal fired before the request and mid-stream as `aborted`; the idle timeout while waiting for headers and between chunks, and its reset by data (fake timers, no real waiting); the body cancelled and the timer cleared on every way the stream can end. Verify they fail
+- [x] 4.6 Add cancellation mapping, the idle timeout and resource release to `AnthropicProvider`; verify the tests pass
+- [x] 4.7 Request review of group 4b
 
 ## 5. Fixtures and the contract suite
 

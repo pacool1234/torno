@@ -14,7 +14,10 @@ export type AnthropicProviderOptions = {
   baseUrl: string;
   apiKey?: string;
   fetch?: typeof fetch;
+  idleTimeoutMs?: number;
 };
+
+const DEFAULT_IDLE_TIMEOUT_MS = 60_000;
 
 const MAX_ERROR_DETAIL = 300;
 
@@ -26,11 +29,13 @@ export class AnthropicProvider implements ModelProvider {
   readonly #url: string;
   readonly #headers: Record<string, string>;
   readonly #fetch: typeof fetch;
+  readonly #idleTimeoutMs: number;
 
   constructor(options: AnthropicProviderOptions) {
     this.#url = messagesUrl(options.baseUrl);
     this.#headers = anthropicHeaders(options.apiKey);
     this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
+    this.#idleTimeoutMs = options.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS;
   }
 
   stream(request: ProviderRequest): AsyncIterable<StreamEvent> {
@@ -38,34 +43,119 @@ export class AnthropicProvider implements ModelProvider {
   }
 
   async *#run(request: ProviderRequest): AsyncGenerator<StreamEvent> {
-    const response = await this.#send(request);
-
-    if (!response.ok) {
-      throw await httpError(response);
-    }
-    if (response.body === null) {
-      throw new ProviderError("protocol", `HTTP ${response.status} response has no body`);
-    }
+    const idle = new IdleTimer(this.#idleTimeoutMs);
+    const signal = AbortSignal.any([request.signal, idle.signal]);
+    let step: "connect" | "read" = "connect";
 
     try {
-      yield* translateStream(parseEventStream(response.body));
-    } catch (error: unknown) {
-      throw asProviderError(error);
-    }
-  }
-
-  async #send(request: ProviderRequest): Promise<Response> {
-    try {
-      return await this.#fetch(this.#url, {
+      idle.start();
+      const response = await this.#fetch(this.#url, {
         method: "POST",
         headers: this.#headers,
         body: JSON.stringify(toAnthropicBody(request)),
-        signal: request.signal,
+        signal,
       });
-    } catch (cause: unknown) {
-      throw new ProviderError("network", `Could not reach ${this.#url}`, { cause });
+      idle.stop();
+      step = "read";
+
+      if (!response.ok) {
+        idle.start();
+        throw await httpError(response);
+      }
+      if (response.body === null) {
+        throw new ProviderError("protocol", `HTTP ${response.status} response has no body`);
+      }
+
+      yield* translateStream(parseEventStream(watchIdle(response.body, idle)));
+    } catch (error: unknown) {
+      throw classify(error, { request, idle, step, url: this.#url });
+    } finally {
+      idle.stop();
     }
   }
+}
+
+class IdleTimer {
+  readonly #ms: number;
+  readonly #controller = new AbortController();
+  #timer: ReturnType<typeof setTimeout> | undefined;
+
+  constructor(ms: number) {
+    this.#ms = ms;
+  }
+
+  get signal(): AbortSignal {
+    return this.#controller.signal;
+  }
+
+  get timedOut(): boolean {
+    return this.#controller.signal.aborted;
+  }
+
+  get seconds(): number {
+    return this.#ms / 1000;
+  }
+
+  start(): void {
+    this.stop();
+    this.#timer = setTimeout(() => {
+      this.#controller.abort(new DOMException("Idle timeout", "TimeoutError"));
+    }, this.#ms);
+  }
+
+  stop(): void {
+    if (this.#timer !== undefined) {
+      clearTimeout(this.#timer);
+      this.#timer = undefined;
+    }
+  }
+}
+
+async function* watchIdle(
+  body: ReadableStream<Uint8Array>,
+  idle: IdleTimer,
+): AsyncGenerator<Uint8Array> {
+  const reader = body.getReader();
+  try {
+    for (;;) {
+      idle.start();
+      const { done, value } = await reader.read();
+      idle.stop();
+      if (done) {
+        return;
+      }
+      yield value;
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
+}
+
+function classify(
+  error: unknown,
+  context: { request: ProviderRequest; idle: IdleTimer; step: "connect" | "read"; url: string },
+): ProviderError {
+  const { request, idle, step, url } = context;
+  if (idle.timedOut) {
+    return new ProviderError("timeout", `No data from the server for ${idle.seconds} seconds`, {
+      cause: error,
+    });
+  }
+  if (request.signal.aborted) {
+    return new ProviderError("aborted", "The request was cancelled", {
+      cause: request.signal.reason,
+    });
+  }
+  if (error instanceof ProviderError) {
+    return error;
+  }
+  return new ProviderError(
+    "network",
+    step === "connect"
+      ? `Could not reach ${url}`
+      : "The connection failed while reading the response",
+    { cause: error },
+  );
 }
 
 async function httpError(response: Response): Promise<ProviderError> {
@@ -89,13 +179,4 @@ function describeErrorBody(text: string): string {
     // Not JSON (e.g. a proxy's HTML page): use the raw text below.
   }
   return text.length > MAX_ERROR_DETAIL ? `${text.slice(0, MAX_ERROR_DETAIL)}…` : text;
-}
-
-function asProviderError(error: unknown): ProviderError {
-  if (error instanceof ProviderError) {
-    return error;
-  }
-  return new ProviderError("network", "The connection failed while reading the response", {
-    cause: error,
-  });
 }
