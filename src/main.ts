@@ -63,10 +63,13 @@ console.log("Ctrl-C cancels the current answer · Ctrl-D or exit quits\n");
 await session.run();
 
 // Short on purpose: the tool descriptions already explain each tool, and every
-// line here is sent (and paid for) with every request.
+// line here is sent (and paid for) with every request. The first line names
+// code as the main job without making it the only one: "a coding agent" alone
+// made models refuse anything else (a story, a question about a word).
 function systemPrompt(root: string): string {
   return [
-    "You are torno, a coding agent working in a local project.",
+    "You are torno, an assistant in the user's terminal, working in a local project.",
+    "Your main job is helping with its code, but you also help with anything else the user asks.",
     `The project root is ${root}. Paths are relative to it.`,
     "Read a file before changing it, and prefer edit_file for small changes.",
     "Every write, edit and command needs the user's approval; if they deny one, ask what they want instead.",

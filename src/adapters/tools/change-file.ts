@@ -3,7 +3,8 @@
 // refuse secret files (through the workspace), and both apply design D3: an
 // existing file may only be changed if the model read it, as it is now.
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { isUtf8 } from "node:buffer";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { z } from "zod";
 import type { Tool, ToolOutput } from "../../core/ports/tool.ts";
@@ -55,10 +56,13 @@ export function createWriteFile(workspace: Workspace, log: ReadLog): Tool {
       if (current.kind === "directory") {
         return failure(`"${path}" is a directory, not a file.`);
       }
+      if (current.kind === "special") {
+        return failure(notRegular(path));
+      }
       // Design D3 applies to replacing only: creating a file can't overwrite
       // anything the model hasn't seen.
       if (current.kind === "file") {
-        const refusal = staleRefusal(log, target, current.bytes, path);
+        const refusal = changeRefusal(log, target, current.bytes, path);
         if (refusal !== undefined) {
           return refusal;
         }
@@ -112,6 +116,8 @@ export function createEditFile(workspace: Workspace, log: ReadLog): Tool {
           return failure(`"${path}" does not exist. Use write_file to create it.`);
         case "directory":
           return failure(`"${path}" is a directory, not a file.`);
+        case "special":
+          return failure(notRegular(path));
         case "error":
           return failure(`Could not read "${path}": ${current.message}`);
         case "file":
@@ -121,7 +127,7 @@ export function createEditFile(workspace: Workspace, log: ReadLog): Tool {
           throw new Error(`Unhandled file state: ${JSON.stringify(unhandled)}`);
         }
       }
-      const refusal = staleRefusal(log, target, current.bytes, path);
+      const refusal = changeRefusal(log, target, current.bytes, path);
       if (refusal !== undefined) {
         return refusal;
       }
@@ -159,23 +165,53 @@ export function createEditFile(workspace: Workspace, log: ReadLog): Tool {
 type CurrentContent =
   | { kind: "missing" }
   | { kind: "directory" }
+  // A named pipe, a socket or a device.
+  | { kind: "special" }
   | { kind: "file"; bytes: Buffer }
   | { kind: "error"; message: string };
 
 async function currentContent(path: string): Promise<CurrentContent> {
   try {
+    // `stat` before reading: opening a named pipe for reading blocks until
+    // something writes to it, which nothing will, and the loop can't
+    // interrupt a waiting tool.
+    const info = await stat(path);
+    if (info.isDirectory()) {
+      return { kind: "directory" };
+    }
+    if (!info.isFile()) {
+      return { kind: "special" };
+    }
     return { kind: "file", bytes: await readFile(path) };
   } catch (error: unknown) {
-    const code = (error as { code?: unknown } | null)?.code;
-    if (code === "ENOENT") {
+    if ((error as { code?: unknown } | null)?.code === "ENOENT") {
       return { kind: "missing" };
-    }
-    // readFile on a directory fails with EISDIR, which saves a separate stat.
-    if (code === "EISDIR") {
-      return { kind: "directory" };
     }
     return { kind: "error", message: String(error) };
   }
+}
+
+const notRegular = (path: string): string =>
+  `"${path}" is not a regular file (a named pipe or a device, for example).`;
+
+// Why an existing file may not be changed, or undefined if it may.
+//
+// Encoding first (spec "Only UTF-8 files are changed"): both tools work on
+// decoded text, and writing it back would replace every byte that didn't
+// decode with U+FFFD, corrupting parts of the file the change never touched.
+// Checked before the read log, because reading again wouldn't help.
+function changeRefusal(
+  log: ReadLog,
+  target: string,
+  bytes: Buffer,
+  path: string,
+): ToolOutput | undefined {
+  if (!isUtf8(bytes)) {
+    return failure(
+      `"${path}" is not valid UTF-8 text, and changing it here would corrupt the bytes that aren't. Use bash to change it.`,
+    );
+  }
+  return staleRefusal(log, target, bytes, path);
 }
 
 // Design D3's check, worded for the model: what to do next is in the message.

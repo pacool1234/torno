@@ -19,17 +19,17 @@ export class Renderer {
     switch (event.type) {
       case "text_delta":
         this.atLineStart = event.text.endsWith("\n");
-        return event.text;
+        return visible(event.text);
       // Not shown: the tool's own line follows once it starts, and a step's
       // usage is for telemetry (week 2), not for the user.
       case "tool_call_started":
       case "step_completed":
         return "";
       case "tool_started":
-        return this.line(`→ ${event.call.toolName}: ${mainArgument(event.call)}`);
+        return this.line(visible(`→ ${event.call.toolName}: ${mainArgument(event.call)}`));
       case "tool_finished":
         return this.line(
-          event.result.isError ? `  ✗ ${firstLine(event.result.result)}` : "  ✓ done",
+          event.result.isError ? `  ✗ ${visible(firstLine(event.result.result))}` : "  ✓ done",
         );
       case "turn_ended":
         return this.ending(event);
@@ -66,7 +66,7 @@ export class Renderer {
       case "max_tokens":
         return this.line("[stopped: the answer hit the output limit]");
       case "failed":
-        return this.line(`[error (${event.error.kind}): ${event.error.message}]`);
+        return this.line(visible(`[error (${event.error.kind}): ${event.error.message}]`));
       default: {
         const unhandled: never = event;
         throw new Error(`Unhandled turn ending: ${JSON.stringify(unhandled)}`);
@@ -97,6 +97,43 @@ function shorten(text: string): string {
   return cut === text ? cut : `${cut} …`;
 }
 
+// `\r?\n`: a Windows line ending (common in command output) ends the line
+// too, rather than leaving its carriage return behind.
 function firstLine(text: string): string {
-  return text.split("\n", 1)[0] ?? "";
+  return text.split(/\r?\n/, 1)[0] ?? "";
+}
+
+// What a terminal would obey rather than show (spec "Control characters are
+// shown, not obeyed"):
+// - C0 controls except tab and newline: ESC starts sequences that move the
+//   cursor, erase lines or retitle the window; a lone carriage return goes
+//   back to the line's start, so what follows overwrites what came before.
+//   One followed by a newline is just a Windows line ending, and harmless.
+// - DEL and the C1 controls (U+0080–U+009F): some terminals treat U+009B
+//   as ESC [.
+// - Unicode's bidirectional controls: they change the order text is
+//   displayed in ("Trojan Source"), so `rm a #\u202e...` could read as
+//   something else.
+// A regex over UTF-16 code units: every character listed is a single unit.
+const UNSAFE =
+  // eslint-disable-next-line no-control-regex -- matching control characters is the point.
+  /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]|\r(?!\n)/g;
+
+// Replaces each unsafe character with an escape that shows its code: \x1b
+// for one below U+0100, \u202e above, and \r for a carriage return, the one
+// most people recognise by name. Every piece of text that came from
+// the model, a tool or the provider goes through this before the terminal
+// sees it; the session's own text ("> ", "[cancelled]") doesn't need to.
+// Stateless, so streamed fragments can be escaped one by one; the only cost
+// is that a Windows line ending split between two fragments shows as \r.
+export function visible(text: string): string {
+  return text.replace(UNSAFE, (char) => {
+    if (char === "\r") {
+      return "\\r";
+    }
+    const code = char.charCodeAt(0);
+    return code < 0x100
+      ? `\\x${code.toString(16).padStart(2, "0")}`
+      : `\\u${code.toString(16).padStart(4, "0")}`;
+  });
 }

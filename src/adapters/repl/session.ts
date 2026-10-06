@@ -159,8 +159,21 @@ class LineReader {
     options: { signal?: AbortSignal; fresh?: boolean } = {},
   ): Promise<string | null> {
     const { signal, fresh = false } = options;
+    // Ctrl-C may already have aborted the turn before the question is asked
+    // (while its summary was being prepared). A listener added to an aborted
+    // signal never fires, so without this check the question would wait for
+    // Enter, and another Ctrl-C couldn't help: the turn is already aborted.
+    if (signal?.aborted === true) {
+      return Promise.reject(new DOMException("The question was interrupted", "AbortError"));
+    }
     if (fresh) {
       this.#buffered = [];
+    }
+    // The input already ended (`echo task | pnpm start` closes it while the
+    // turn runs): readline throws if asked to prompt once closed, and no
+    // new line can come, so only lines read before the end are left.
+    if (this.#closed) {
+      return Promise.resolve(this.#buffered.shift() ?? null);
     }
     // setPrompt + prompt rather than a plain write: in a terminal, readline
     // then knows the prompt and redraws it correctly while the user edits.
@@ -170,9 +183,6 @@ class LineReader {
     const typedAhead = this.#buffered.shift();
     if (typedAhead !== undefined) {
       return Promise.resolve(typedAhead);
-    }
-    if (this.#closed) {
-      return Promise.resolve(null);
     }
     return new Promise((resolve, reject) => {
       const onAbort = (): void => {

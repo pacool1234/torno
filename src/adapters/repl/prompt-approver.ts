@@ -4,6 +4,7 @@
 
 import type { ToolCallBlock } from "../../core/conversation.ts";
 import type { ApprovalDecision, Approver } from "../../core/ports/approver.ts";
+import { visible } from "./render.ts";
 
 export type PromptApproverDeps = {
   // Built by the tools module (it needs the file system); see summarize.ts.
@@ -30,7 +31,10 @@ export class PromptApprover implements Approver {
     // "[y/N]": the capital N is the usual way to show the default.
     // A rejection (Ctrl-C at the question) propagates on purpose: the loop
     // sees an aborted signal and ends the turn as cancelled.
-    const answer = await this.#deps.ask(`${summary}\nAllow? [y/N] `, signal);
+    // visible(): the summary carries the model's raw input, and a control
+    // character in it could make the question show a different command
+    // from the one that will run (spec "A command that hides itself").
+    const answer = await this.#deps.ask(`${visible(summary)}\nAllow? [y/N] `, signal);
     return YES.test(answer.trim()) ? "approve" : "deny";
   }
 }

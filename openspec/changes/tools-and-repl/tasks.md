@@ -36,6 +36,6 @@ Each group is test-first and sized for one review. The AI stops after each group
 
 ## 7. Close the change
 
-- [ ] 7.1 Run the full `REVIEW.md` review of the change and resolve its findings
+- [x] 7.1 Run the full `REVIEW.md` review of the change and resolve its findings
 - [ ] 7.2 Verify all scripts pass locally and CI is green on GitHub
 - [ ] 7.3 Run `pnpm exec openspec validate tools-and-repl --strict`, archive the change, and format the archived specs

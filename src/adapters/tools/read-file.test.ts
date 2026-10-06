@@ -2,6 +2,7 @@
 // temporary directories, like the workspace tests: what's under test is how
 // the tool meets the actual file system.
 
+import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -80,6 +81,29 @@ describe("read_file: reading", () => {
   });
 });
 
+// "café\n" in Latin-1: é is the single byte 0xE9, which isn't valid UTF-8.
+const LATIN_1_CAFE = Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x0a]);
+
+// Spec scenario "Reading a Latin-1 file": readable, but the model is told the
+// text isn't exact, and why it won't be able to change the file.
+describe("read_file: files that aren't UTF-8", () => {
+  it("returns the text with a note that the file isn't valid UTF-8", async () => {
+    await writeFile(join(root, "old.txt"), LATIN_1_CAFE);
+
+    const output = await read({ path: "old.txt" });
+
+    expect(output.isError).toBe(false);
+    expect(output.result.startsWith("caf")).toBe(true);
+    expect(output.result).toMatch(/not valid UTF-8[^\n]*\]$/);
+  });
+
+  it("adds no note to a UTF-8 file", async () => {
+    await writeFile(join(root, "new.txt"), "café\n");
+
+    expect((await read({ path: "new.txt" })).result).toBe("café\n");
+  });
+});
+
 describe("read_file: refusals and failures", () => {
   // Spec scenario "Missing file".
   it("reports a missing file", async () => {
@@ -96,6 +120,18 @@ describe("read_file: refusals and failures", () => {
 
     expect(output.isError).toBe(true);
     expect(output.result).toMatch(/directory/);
+  });
+
+  // Spec scenario "Not a regular file". Reading a named pipe blocks until
+  // something writes to it, and the loop can't interrupt a tool that's
+  // waiting (it awaits execute), so the tool must refuse before opening it.
+  it("refuses a named pipe at once", async () => {
+    execFileSync("mkfifo", [join(root, "pipe")]);
+
+    const output = await read({ path: "pipe" });
+
+    expect(output.isError).toBe(true);
+    expect(output.result).toMatch(/not a regular file/);
   });
 
   it("refuses a file over 1 MB, saying how big it is", async () => {

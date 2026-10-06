@@ -3,7 +3,8 @@
 // read_file. One file for both tools because they share the read-log rules,
 // and each rule is tested for both.
 
-import { readFile, stat, symlink } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { readFile, stat, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Tool } from "../../core/ports/tool.ts";
@@ -243,5 +244,46 @@ describe("write_file and edit_file: refusals", () => {
 
     expect(output.isError).toBe(true);
     expect(output.result).toMatch(field);
+  });
+});
+
+// Spec requirement "Only UTF-8 files are changed": the tools decode the file
+// to text, and writing that text back would turn every byte that didn't
+// decode into U+FFFD, silently changing parts of the file the edit never
+// touched.
+describe("write_file and edit_file: files that aren't UTF-8", () => {
+  // "café\nx=1\n" in Latin-1: é is the single byte 0xE9.
+  const latin1 = Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x0a, 0x78, 0x3d, 0x31, 0x0a]);
+
+  // Spec scenario "Editing a Latin-1 file".
+  it.each([
+    ["edit_file", () => edit({ path: "old.txt", old_text: "x=1", new_text: "x=2" })],
+    ["write_file", () => write({ path: "old.txt", content: "x=2\n" })],
+  ])("%s refuses it, suggesting bash, and leaves its bytes as they were", async (_name, change) => {
+    await writeFile(join(project.root, "old.txt"), latin1);
+    await readTool("old.txt");
+
+    const output = await change();
+
+    expect(output.isError).toBe(true);
+    expect(output.result).toMatch(/not valid UTF-8/);
+    expect(output.result).toMatch(/bash/);
+    expect(await readFile(join(project.root, "old.txt"))).toEqual(latin1);
+  });
+});
+
+// Opening a named pipe for reading blocks until a writer appears, and nothing
+// would ever write: the tool must refuse it without opening it.
+describe("write_file and edit_file: not a regular file", () => {
+  it.each([
+    ["edit_file", () => edit({ path: "pipe", old_text: "a", new_text: "b" })],
+    ["write_file", () => write({ path: "pipe", content: "b" })],
+  ])("%s refuses a named pipe at once", async (_name, change) => {
+    execFileSync("mkfifo", [join(project.root, "pipe")]);
+
+    const output = await change();
+
+    expect(output.isError).toBe(true);
+    expect(output.result).toMatch(/not a regular file/);
   });
 });
