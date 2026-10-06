@@ -34,10 +34,20 @@ The six `model-provider` scenarios handed over by `model-and-provider-port` (its
 
 ## 4. HTTP provider
 
-- [ ] 4.1 Write a fake `fetch` helper in `test/helpers/`: answers with a given status and body, streams the body in chosen chunks, can cut the body short or hold it open, and counts bodies still open
-- [ ] 4.2 Write tests for: every status mapping in the spec, with the server's message in the error; connection failure and body read failure as `network`; a signal fired before the request and mid-stream as `aborted`; the idle timeout while waiting for headers and between chunks, and its reset by data (fake timers, no real waiting); the body cancelled and the timer cleared on every way the stream can end. Verify they fail
-- [ ] 4.3 Implement `AnthropicProvider` (base URL, optional API key, injectable `fetch`, idle timeout); verify the tests pass
-- [ ] 4.4 Request review of group 4
+Split in two reviews (4a, 4b) to stay near the ~300-line size.
+
+### 4a. Requests, statuses and network failures
+
+- [x] 4.1 Write a fake `fetch` helper in `test/helpers/`: records each call, answers with a given status and body, streams the body in chosen chunks, can fail the connection, fail the body mid-stream or hold it open, and counts bodies still open
+- [x] 4.2 Write tests for: the request sent (URL, method, headers, body); a successful stream translated end to end; nothing sent before iteration starts; every status mapping in the spec, with the server's message in the error and never the API key; a non-JSON error body; connection failure and body read failure as `network`. Verify they fail
+- [x] 4.3 Implement `AnthropicProvider` (base URL, optional API key, injectable `fetch`); verify the tests pass
+- [x] 4.4 Request review of group 4a
+
+### 4b. Cancellation, idle timeout and releasing resources
+
+- [ ] 4.5 Write tests for: a signal fired before the request and mid-stream as `aborted`; the idle timeout while waiting for headers and between chunks, and its reset by data (fake timers, no real waiting); the body cancelled and the timer cleared on every way the stream can end. Verify they fail
+- [ ] 4.6 Add cancellation mapping, the idle timeout and resource release to `AnthropicProvider`; verify the tests pass
+- [ ] 4.7 Request review of group 4b
 
 ## 5. Fixtures and the contract suite
 

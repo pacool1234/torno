@@ -13,3 +13,22 @@ const KIND_BY_ERROR_TYPE = new Map<string, ProviderErrorKind>([
 export function kindForErrorType(errorType: string): ProviderErrorKind {
   return KIND_BY_ERROR_TYPE.get(errorType) ?? "invalid_request";
 }
+
+export function kindForStatus(status: number): ProviderErrorKind {
+  switch (status) {
+    case 401:
+    case 402:
+    case 403:
+      return "auth";
+    case 429:
+      return "rate_limit";
+    case 500:
+    case 502:
+    case 503:
+    case 504:
+    case 529:
+      return "overloaded";
+    default:
+      return "invalid_request";
+  }
+}
