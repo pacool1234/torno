@@ -30,9 +30,9 @@ Each group is test-first and sized for one review. The AI stops after each group
 
 ## 6. The session and the wiring
 
-- [ ] 6.1 Write tests driving the REPL with in-memory streams and a scripted provider: two turns keep the conversation, empty lines ignored, `exit` and end of input, Ctrl-C while streaming, at the approval question, and at the prompt; verify they fail
-- [ ] 6.2 Implement the session loop, then `src/main.ts` with the system prompt (and a test for the bad-configuration exit); verify the tests pass
-- [ ] 6.3 Run torno by hand against Ollama and Claude Haiku on a small scratch repo: a read, an approved edit, a denied command, Ctrl-C mid-stream; report what happened
+- [x] 6.1 Write tests driving the REPL with in-memory streams and a scripted provider: two turns keep the conversation, empty lines ignored, `exit` and end of input, Ctrl-C while streaming, at the approval question, and at the prompt; verify they fail
+- [x] 6.2 Implement the session loop, then `src/main.ts` with the system prompt (and a test for the bad-configuration exit); verify the tests pass
+- [x] 6.3 Run torno by hand against Ollama and Claude Haiku on a small scratch repo: a read, an approved edit, a denied command, Ctrl-C mid-stream; report what happened
 
 ## 7. Close the change
 
