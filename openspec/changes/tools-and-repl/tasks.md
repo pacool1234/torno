@@ -9,8 +9,8 @@ Each group is test-first and sized for one review. The AI stops after each group
 
 ## 2. read_file and the read log
 
-- [ ] 2.1 Write tests: text returned unchanged and recorded, missing file, directory, file over 1 MB, binary file, invalid input, confinement and secret refusals reported as error results; verify they fail
-- [ ] 2.2 Implement the read log (path → SHA-256) and `read_file`; verify the tests pass
+- [x] 2.1 Write tests: text returned unchanged and recorded, missing file, directory, file over 1 MB, binary file, invalid input, confinement and secret refusals reported as error results; verify they fail
+- [x] 2.2 Implement the read log (path → SHA-256) and `read_file`; verify the tests pass
 
 ## 3. write_file and edit_file
 
