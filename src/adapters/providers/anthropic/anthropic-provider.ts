@@ -85,7 +85,9 @@ function describeErrorBody(text: string): string {
     if (parsed.success) {
       return `${parsed.data.error.type}: ${parsed.data.error.message}`;
     }
-  } catch {}
+  } catch {
+    // Not JSON (e.g. a proxy's HTML page): use the raw text below.
+  }
   return text.length > MAX_ERROR_DETAIL ? `${text.slice(0, MAX_ERROR_DETAIL)}…` : text;
 }
 
