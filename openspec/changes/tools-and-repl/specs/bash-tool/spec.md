@@ -28,6 +28,15 @@ The `bash` tool: runs one shell command in the project root, with a time limit, 
 - **WHEN** the command is `read line; echo "got:$line"`
 - **THEN** it finishes at once, printing "got:" with nothing after it
 
+### Requirement: Nothing outlives the command
+
+When the command ends, `bash` SHALL stop every process it started that is still running (its process group), so a background job can't keep running unseen after the turn.
+
+#### Scenario: Background job
+
+- **WHEN** the command is `sleep 1000 & echo started`
+- **THEN** the result is "started" and "[exit code 0]", returned without waiting for `sleep`, and no `sleep` process is left running
+
 ### Requirement: Time limit
 
 A command still running after 2 minutes SHALL be stopped, together with every process it started, and the result SHALL be an error ending with "[timed out after 120 s]".

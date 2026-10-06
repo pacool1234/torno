@@ -20,8 +20,8 @@ Each group is test-first and sized for one review. The AI stops after each group
 
 ## 4. bash
 
-- [ ] 4.1 Write tests: success and exit codes, working directory, stdin closed, stdout and stderr combined, time limit (short limit injected for the test), cancellation stopping a child process, bounded output, secrets removed from the environment, invalid input; verify they fail
-- [ ] 4.2 Implement `bash`; verify the tests pass
+- [x] 4.1 Write tests: success and exit codes, working directory, stdin closed, stdout and stderr combined, time limit (short limit injected for the test), cancellation stopping a child process, bounded output, secrets removed from the environment, invalid input; verify they fail
+- [x] 4.2 Implement `bash`; verify the tests pass
 
 ## 5. REPL rendering and approval
 

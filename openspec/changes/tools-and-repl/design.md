@@ -70,6 +70,8 @@ Alternative: a unified diff (clearer for large edits, but needs a diff algorithm
 
 - `bash -c <command>` in the project root, with stdin closed, stdout and stderr combined in arrival order.
 - Started in its own process group (`detached: true`), so cancellation and the time limit can stop the command and everything it started: SIGTERM to the group, then SIGKILL after 2 seconds if it's still running.
+- When `bash` itself exits, the rest of its process group is stopped the same way: a background job (`npm run dev &`) would otherwise keep running unseen, and keep the output pipe open.
+- stdout and stderr are merged inside the shell (`exec 2>&1` before the command), so their order is the order they were written; two separate pipes read by Node can interleave differently.
 - Time limit: 2 minutes per command.
 - Output kept in memory: the first and last 100,000 characters; the loop's 30,000-character cap applies afterwards.
 - Result: the output, then a status line (`[exit code 0]`, `[timed out after 120 s]`, `[cancelled]`). A non-zero exit, a timeout or a cancellation is an error result.
