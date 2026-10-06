@@ -1,0 +1,40 @@
+{
+  "name": "haiku-tool-call",
+  "purpose": "Text, then a tool call: the shape of every agent-loop step that uses a tool.",
+  "recordedAt": "2026-10-06T15:48:05.350Z",
+  "baseUrl": "https://api.anthropic.com",
+  "status": 200,
+  "request": {
+    "model": "claude-haiku-4-5",
+    "max_tokens": 300,
+    "stream": true,
+    "system": "Before calling a tool, always say in one short sentence what you are about to do.",
+    "tools": [
+      {
+        "name": "read_file",
+        "description": "Read a text file from the project and return its contents.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Path relative to the project root"
+            }
+          },
+          "required": ["path"]
+        }
+      }
+    ],
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "What does README.md in this project say?"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "haiku-text",
+  "purpose": "Text-only answer. Asks for non-ASCII text so chunk tests split multi-byte characters.",
+  "recordedAt": "2026-10-06T15:48:04.351Z",
+  "baseUrl": "https://api.anthropic.com",
+  "status": 200,
+  "request": {
+    "model": "claude-haiku-4-5",
+    "max_tokens": 200,
+    "stream": true,
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "In two short sentences, say what a lathe is in Spanish, then the same in Japanese."
+          }
+        ]
+      }
+    ]
+  }
+}

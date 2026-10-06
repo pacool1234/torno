@@ -1,0 +1,23 @@
+{
+  "name": "haiku-max-tokens",
+  "purpose": "Answer cut off by max_tokens: stop reason max_tokens, partial text kept.",
+  "recordedAt": "2026-10-06T15:48:05.997Z",
+  "baseUrl": "https://api.anthropic.com",
+  "status": 200,
+  "request": {
+    "model": "claude-haiku-4-5",
+    "max_tokens": 20,
+    "stream": true,
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Write three paragraphs about the history of the lathe."
+          }
+        ]
+      }
+    ]
+  }
+}

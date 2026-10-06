@@ -45,5 +45,7 @@
     // and checking them is slow.
     "skipLibCheck": true
   },
-  "include": ["src", "test"]
+  // scripts/ holds dev tools (fixture recording); they import adapter code, so
+  // they are type-checked and linted like the rest.
+  "include": ["src", "test", "scripts"]
 }

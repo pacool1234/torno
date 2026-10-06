@@ -51,11 +51,11 @@ Split in two reviews (4a, 4b) to stay near the ~300-line size.
 
 ## 5. Fixtures and the contract suite
 
-- [ ] 5.1 Write `scripts/record-fixture.ts` with named requests: from Claude Haiku a text-only answer, text then a tool call, a response cut by `max_tokens`, and a 401 from an invalid key; from Ollama a response with a `thinking` block before a tool call. It saves the body and a metadata file, never headers
-- [ ] 5.2 Ask the human before recording (it spends a few cents), record the fixtures, and check that no fixture contains an API key or private data
-- [ ] 5.3 Write fixture tests: each recording gives the same events whole and in awkward chunks; the `max_tokens`, `thinking` and 401 recordings produce the handed-over scenarios' results; text fragments rebuild the recorded text
-- [ ] 5.4 Write `anthropic-provider.contract.test.ts`: a factory that replays the recordings through the fake `fetch` (cut short for "failure after text", held open for "never finishes") and runs the shared contract suite; verify it passes, and that it fails when the provider is broken
-- [ ] 5.5 Request review of group 5
+- [x] 5.1 Write `scripts/record-fixture.ts` with named requests: from Claude Haiku a text-only answer, text then a tool call, a response cut by `max_tokens`, and a 401 from an invalid key; from Ollama a response with a `thinking` block before a tool call. It saves the body and a metadata file, never headers
+- [x] 5.2 Ask the human before recording (it spends a few cents), record the fixtures, and check that no fixture contains an API key or private data
+- [x] 5.3 Write fixture tests: each recording gives the same events whole and in awkward chunks; the `max_tokens`, `thinking` and 401 recordings produce the handed-over scenarios' results; text fragments rebuild the recorded text
+- [x] 5.4 Write `anthropic-provider.contract.test.ts`: a factory that replays the recordings through the fake `fetch` (cut short for "failure after text", held open for "never finishes") and runs the shared contract suite; verify it passes, and that it fails when the provider is broken
+- [x] 5.5 Request review of group 5
 
 ## 6. Configuration and smoke script
 

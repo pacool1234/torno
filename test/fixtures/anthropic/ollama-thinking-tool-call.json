@@ -1,0 +1,39 @@
+{
+  "name": "ollama-thinking-tool-call",
+  "purpose": "Local model: a thinking block (unsupported, skipped) before a tool call.",
+  "recordedAt": "2026-10-06T15:48:17.659Z",
+  "baseUrl": "http://localhost:11434",
+  "status": 200,
+  "request": {
+    "model": "gemma4:e4b",
+    "max_tokens": 1000,
+    "stream": true,
+    "tools": [
+      {
+        "name": "read_file",
+        "description": "Read a text file from the project and return its contents.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Path relative to the project root"
+            }
+          },
+          "required": ["path"]
+        }
+      }
+    ],
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "What does README.md in this project say?"
+          }
+        ]
+      }
+    ]
+  }
+}
