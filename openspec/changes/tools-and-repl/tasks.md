@@ -4,8 +4,8 @@ Each group is test-first and sized for one review. The AI stops after each group
 
 ## 1. Path confinement and secret files
 
-- [ ] 1.1 Write tests for resolving a path inside the root (parent escape, symlink out, prefix look-alike, absolute path inside, new file in a new directory, new file under a symlink out, `.env` and `.env.local` refused, `.env.example` allowed, symlink to `.env`), using real temporary directories; verify they fail
-- [ ] 1.2 Implement the workspace (`src/adapters/tools/workspace.ts`: root resolved once, `resolveInside`, the secret-file rule); verify the tests pass
+- [x] 1.1 Write tests for resolving a path inside the root (parent escape, symlink out, prefix look-alike, absolute path inside, new file in a new directory, new file under a symlink out, `.env` and `.env.local` refused, `.env.example` allowed, symlink to `.env`), using real temporary directories; verify they fail
+- [x] 1.2 Implement the workspace (`src/adapters/tools/workspace.ts`: root resolved once, `resolveInside`, the secret-file rule); verify the tests pass
 
 ## 2. read_file and the read log
 

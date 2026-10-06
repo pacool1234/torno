@@ -33,6 +33,11 @@ Every file tool SHALL resolve the requested path against the project root, follo
 - **WHEN** `out` is a symlink to a directory outside the project, and the model writes `out/a.ts`
 - **THEN** the result is an error saying the path is outside the project, and nothing is written
 
+#### Scenario: Dangling symlink pointing out
+
+- **WHEN** `notes.txt` is a symlink to a file outside the project that doesn't exist yet, and the model writes `notes.txt`
+- **THEN** the result is an error saying the path is outside the project, and nothing is created outside it
+
 ### Requirement: Secret files are refused
 
 File tools SHALL refuse, for reading and writing, any path whose resolved file name is `.env` or starts with `.env.`, except `.env.example`, with an error result saying the file may contain secrets.
