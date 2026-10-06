@@ -4,9 +4,9 @@ Each group is test-first and sized for one review. The AI stops after each group
 
 ## 1. Ports, events and test helpers
 
-- [ ] 1.1 Define the tool port (`src/core/ports/tool.ts`: definition, `needsApproval`, `execute(input, signal)` returning a result text and an error flag) and the approver port (`src/core/ports/approver.ts`: `approve(call, signal)` returning approve or deny)
-- [ ] 1.2 Define `AgentEvent` (text, tool call started, step completed, tool started, tool finished, turn ended with reason and conversation) and `AgentConfig` (provider, tools, approver, model, system, `maxOutputTokens`, `maxSteps`, with the defaults 8192 and 25), with type tests for the `turn_ended` union
-- [ ] 1.3 Write test helpers: a scripted tool (records calls and signals, returns or throws what it's told, can wait until aborted), a scripted approver, and `expectValidConversation` checking the invariant in design D2
+- [x] 1.1 Define the tool port (`src/core/ports/tool.ts`: definition, `needsApproval`, `execute(input, signal)` returning a result text and an error flag) and the approver port (`src/core/ports/approver.ts`: `approve(call, signal)` returning approve or deny)
+- [x] 1.2 Define `AgentEvent` (text, tool call started, step completed, tool started, tool finished, turn ended with reason and conversation) and `AgentConfig` (provider, tools, approver, model, system, `maxOutputTokens`, `maxSteps`, with the defaults 8192 and 25), with type tests for the `turn_ended` union
+- [x] 1.3 Write test helpers: a scripted tool (records calls and signals, returns or throws what it's told, can wait until aborted), a scripted approver, and `expectValidConversation` checking the invariant in design D2
 
 ## 2. A turn without tools
 
