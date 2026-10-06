@@ -1,7 +1,12 @@
 // The agent loop (agent-loop change). `runTurn` adds the prompt, runs steps
 // (a model request, then the tools it asked for) and always ends with one
-// `turn_ended` carrying the new conversation (design D1). Cancellation comes
-// in group 5.
+// `turn_ended` carrying the new conversation (design D1).
+//
+// Cancellation is checked at fixed points rather than everywhere: before each
+// model request, before each tool call, and after an approval. Between those
+// points the signal is passed down (provider, approver, tool), so whatever is
+// running at the moment of Ctrl-C stops itself; the checks then make sure the
+// loop starts nothing new.
 
 import type { AgentConfig, AgentEvent } from "./agent.ts";
 import type {
@@ -18,6 +23,7 @@ import {
   type StopReason,
   type Usage,
 } from "./ports/model-provider.ts";
+import type { ApprovalDecision } from "./ports/approver.ts";
 import type { Tool, ToolOutput } from "./ports/tool.ts";
 
 // Results the model reads for calls that weren't run normally. Fixed texts,
@@ -25,6 +31,7 @@ import type { Tool, ToolOutput } from "./ports/tool.ts";
 // another tool, ask the user) rather than retry blindly.
 const DENIED = "The user denied this tool call.";
 const NOT_RUN_OUTPUT_LIMIT = "Not run: the response hit the output limit.";
+const NOT_RUN_CANCELLED = "Not run: the user cancelled.";
 
 export async function* runTurn(
   config: AgentConfig,
@@ -40,6 +47,13 @@ export async function* runTurn(
   const tools = new Map(config.tools.map((tool) => [tool.definition.name, tool]));
 
   for (let step = 1; ; step += 1) {
+    // Checkpoint 1: before each request. Covers a signal aborted before the
+    // turn started, and Ctrl-C while the previous step's last tool finished.
+    if (signal.aborted) {
+      yield { type: "turn_ended", reason: "cancelled", conversation: messages };
+      return;
+    }
+
     let response: StepResponse;
     try {
       response = yield* streamStep(config, messages, signal, step);
@@ -49,6 +63,13 @@ export async function* runTurn(
       // `messages` yet, so the step in progress is dropped and every finished
       // step stays (design D2). No retry (ADR-0007): the user decides.
       // Anything else is a bug and propagates.
+      // A cancellation surfaces from the provider as kind "aborted". The
+      // signal is checked too: if Ctrl-C raced with a network error, the user
+      // still asked to stop, so the turn ends as cancelled, not failed.
+      if (error instanceof ProviderError && (error.kind === "aborted" || signal.aborted)) {
+        yield { type: "turn_ended", reason: "cancelled", conversation: messages };
+        return;
+      }
       if (error instanceof ProviderError) {
         yield { type: "turn_ended", reason: "failed", error, conversation: messages };
         return;
@@ -93,11 +114,27 @@ export async function* runTurn(
     // them all at once, which is the deferred "parallel tool calls".
     const results: ToolResultBlock[] = [];
     for (const call of calls) {
+      // Checkpoint 2: before each call. After Ctrl-C, the remaining calls
+      // still get a result each (design D2), or the conversation couldn't
+      // be sent again.
+      if (signal.aborted) {
+        const result = notRun(call, NOT_RUN_CANCELLED);
+        yield { type: "tool_finished", call, result };
+        results.push(result);
+        continue;
+      }
       results.push(yield* runCall(config, tools, call, signal));
     }
     // All of the step's results in one user message (ADR-0007), in call
     // order: a message per result would put two user messages in a row.
     messages.push({ role: "user", content: nonEmptyCopy(results) });
+
+    // Checked before the step limit: the user's Ctrl-C is the more useful
+    // thing to report when both happen in the same step.
+    if (signal.aborted) {
+      yield { type: "turn_ended", reason: "cancelled", conversation: messages };
+      return;
+    }
 
     // Design D4: the limit is checked after the step's tools ran, so their
     // results are kept and "continue" picks up exactly here. Checked before
@@ -145,10 +182,30 @@ async function* runCall(
 
   // Design D3: approval happens here, in the loop, so it's visible in the
   // events and the same for every tool.
-  if (tool.needsApproval && (await config.approver.approve(call, signal)) === "deny") {
-    const result = finish({ result: DENIED, isError: true });
-    yield { type: "tool_finished", call, result };
-    return result;
+  if (tool.needsApproval) {
+    let decision: ApprovalDecision | undefined;
+    try {
+      decision = await config.approver.approve(call, signal);
+    } catch (error: unknown) {
+      // An approver may reject when Ctrl-C interrupts its prompt; that's a
+      // cancellation, handled below. Rejecting without one is a bug in the
+      // approver (design D1: bugs throw).
+      if (!signal.aborted) {
+        throw error;
+      }
+    }
+    // Checkpoint 3: after the approval. Whatever the approver answered, a
+    // question interrupted by Ctrl-C must not lead to running the tool.
+    if (signal.aborted) {
+      const result = notRun(call, NOT_RUN_CANCELLED);
+      yield { type: "tool_finished", call, result };
+      return result;
+    }
+    if (decision === "deny") {
+      const result = finish({ result: DENIED, isError: true });
+      yield { type: "tool_finished", call, result };
+      return result;
+    }
   }
 
   yield { type: "tool_started", call };

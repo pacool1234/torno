@@ -1,5 +1,5 @@
 // Tests for runTurn: turns without tools (group 2), tools and approval
-// (group 3), limits and failures (group 4).
+// (group 3), limits and failures (group 4), cancellation (group 5).
 // Every test runs offline against ScriptedProvider (ADR-0001), and every test
 // that ends a turn checks the conversation invariant of design D2.
 
@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { ScriptedProvider, type Script } from "../adapters/providers/fake/scripted-provider.ts";
 import { consume } from "../../test/helpers/consume.ts";
 import { ScriptedApprover } from "../../test/helpers/scripted-approver.ts";
-import { ScriptedTool } from "../../test/helpers/scripted-tool.ts";
+import { ScriptedTool, untilAborted } from "../../test/helpers/scripted-tool.ts";
 import { expectValidConversation } from "../../test/helpers/valid-conversation.ts";
 import type { AgentConfig, AgentEvent, TurnEnded } from "./agent.ts";
 import { runTurn } from "./agent-loop.ts";
@@ -642,5 +642,270 @@ describe("runTurn: provider failures", () => {
 
     expect(error).toBeInstanceOf(Error);
     expect(error).not.toBeInstanceOf(ProviderError);
+  });
+});
+
+// Runs a turn and aborts its signal as soon as `when` matches an event: the
+// way Ctrl-C lands at an arbitrary point. The abort happens while the loop is
+// paused at that `yield`, so everything after it sees an aborted signal.
+async function runCancelling(
+  config: AgentConfig,
+  when: (event: AgentEvent) => boolean,
+  conversation: readonly Message[] = [],
+) {
+  const controller = new AbortController();
+  const events: AgentEvent[] = [];
+  for await (const event of runTurn(config, conversation, "Hi", controller.signal)) {
+    events.push(event);
+    if (when(event)) {
+      controller.abort();
+    }
+  }
+  return { events, ended: lastTurnEnded(events), signal: controller.signal };
+}
+
+const NOT_RUN_CANCELLED = "Not run: the user cancelled.";
+const cancelledResult = (id: string) => ({
+  type: "tool_result",
+  toolCallId: id,
+  isError: true,
+  result: NOT_RUN_CANCELLED,
+});
+
+describe("runTurn: cancellation", () => {
+  it("cancelled before starting: no request, and the prompt is kept", async () => {
+    const { provider, config } = setup([answer()]);
+    const controller = new AbortController();
+    controller.abort();
+
+    const { ended } = await run(config, "Hi", [], controller.signal);
+
+    expect(ended.reason).toBe("cancelled");
+    expect(provider.requests).toEqual([]);
+    expect(ended.conversation).toEqual([user("Hi")]);
+  });
+
+  // Spec scenario "Cancelled while streaming".
+  it("cancelled while streaming: the partial response is dropped", async () => {
+    const { provider, config } = setup([
+      { events: [text("Hel"), text("lo")], ending: { type: "hang" } },
+    ]);
+
+    const { events, ended } = await runCancelling(config, (event) => event.type === "text_delta");
+
+    expect(events.map((event) => event.type)).toEqual(["text_delta", "turn_ended"]);
+    expect(ended.reason).toBe("cancelled");
+    expect(ended.conversation).toEqual([user("Hi")]);
+    expect(provider.openStreams).toBe(0);
+  });
+
+  it("cancelled after a response asked for tools: the response stays, its calls don't run", async () => {
+    const readFile = new ScriptedTool("read_file");
+    const { provider, config } = setup(
+      [askFor(call("a", "read_file"), call("b", "read_file")), answer()],
+      {
+        tools: [readFile],
+      },
+    );
+
+    const { events, ended } = await runCancelling(
+      config,
+      (event) => event.type === "step_completed",
+    );
+
+    expect(readFile.calls).toEqual([]);
+    expect(events.some((event) => event.type === "tool_started")).toBe(false);
+    expect(ended.reason).toBe("cancelled");
+    expect(provider.requests).toHaveLength(1);
+    expect(ended.conversation).toEqual([
+      user("Hi"),
+      { role: "assistant", content: [callBlock("a", "read_file"), callBlock("b", "read_file")] },
+      { role: "user", content: [cancelledResult("a"), cancelledResult("b")] },
+    ]);
+  });
+
+  // Spec scenario "Cancelled while a tool runs".
+  it("cancelled while a tool runs: its outcome is kept, later calls don't run", async () => {
+    const bash = new ScriptedTool("bash", { run: untilAborted("stopped by Ctrl-C") });
+    const readFile = new ScriptedTool("read_file");
+    const { provider, config } = setup(
+      [askFor(call("a", "bash"), call("b", "read_file")), answer()],
+      {
+        tools: [bash, readFile],
+      },
+    );
+
+    const { ended, signal } = await runCancelling(config, (event) => event.type === "tool_started");
+
+    // The running tool got the turn's signal, and saw it abort.
+    expect(bash.calls[0]?.signal).toBe(signal);
+    expect(bash.calls[0]?.signal.aborted).toBe(true);
+    expect(readFile.calls).toEqual([]);
+    expect(provider.requests).toHaveLength(1);
+    expect(ended.reason).toBe("cancelled");
+    expect(ended.conversation.at(-1)).toEqual({
+      role: "user",
+      content: [
+        { type: "tool_result", toolCallId: "a", isError: true, result: "stopped by Ctrl-C" },
+        cancelledResult("b"),
+      ],
+    });
+  });
+
+  // Spec scenario "Cancelled at the approval prompt". Two approver styles:
+  // one that rejects when the signal aborts (a REPL prompt interrupted by
+  // Ctrl-C), and one that ignores it and answers anyway. Both must cancel.
+  it.each([
+    [
+      "rejects",
+      (_call: ToolCallBlock, signal: AbortSignal) =>
+        new Promise<"approve">((_resolve, reject) => {
+          signal.addEventListener("abort", () => reject(new Error("prompt interrupted")), {
+            once: true,
+          });
+        }),
+    ],
+    [
+      "approves anyway",
+      (_call: ToolCallBlock, signal: AbortSignal) =>
+        new Promise<"approve">((resolve) => {
+          signal.addEventListener("abort", () => resolve("approve"), { once: true });
+        }),
+    ],
+  ])("cancelled at the approval prompt (the approver %s): nothing runs", async (_name, decide) => {
+    const controller = new AbortController();
+    const bash = new ScriptedTool("bash", { needsApproval: true });
+    const approver = new ScriptedApprover((asked, signal) => {
+      // Ctrl-C lands while the question is open.
+      queueMicrotask(() => controller.abort());
+      return decide(asked, signal);
+    });
+    const { provider, config } = setup([askFor(call("a", "bash"), call("b", "bash")), answer()], {
+      tools: [bash],
+      approver,
+    });
+
+    const { ended } = await run(config, "Hi", [], controller.signal);
+
+    expect(bash.calls).toEqual([]);
+    expect(approver.asked.map((asked) => asked.id)).toEqual(["a"]);
+    expect(provider.requests).toHaveLength(1);
+    expect(ended.reason).toBe("cancelled");
+    expect(ended.conversation.at(-1)).toEqual({
+      role: "user",
+      content: [cancelledResult("a"), cancelledResult("b")],
+    });
+  });
+
+  // An approver that fails without a cancellation is a bug in the approver
+  // (design D1: bugs throw), not a reason to end the turn quietly.
+  it("lets an approver's error propagate when the turn wasn't cancelled", async () => {
+    const { config } = setup([askFor(call("a", "bash")), answer()], {
+      tools: [new ScriptedTool("bash", { needsApproval: true })],
+      approver: new ScriptedApprover(() => {
+        throw new Error("terminal closed");
+      }),
+    });
+
+    const { error } = await consume(runTurn(config, [], "Hi", new AbortController().signal));
+
+    expect(error).toMatchObject({ message: "terminal closed" });
+  });
+
+  // Ctrl-C and the step limit in the same step: the cancellation is reported,
+  // since it's what the user just did. (Without the check right after the
+  // tools, the limit would be reported, and the next step's check would
+  // never run.)
+  it("reports cancelled, not step_limit, when both happen in the last step", async () => {
+    const { config } = setup([askFor(call("a", "bash"))], {
+      tools: [new ScriptedTool("bash", { run: untilAborted() })],
+      maxSteps: 1,
+    });
+
+    const { ended } = await runCancelling(config, (event) => event.type === "tool_started");
+
+    expect(ended.reason).toBe("cancelled");
+  });
+
+  // Same rule as the port's "cancelled after completion": once the model has
+  // ended its turn, there's nothing left to cancel.
+  it("a cancellation after the final answer still ends as completed", async () => {
+    const { config } = setup([answer("All done.")]);
+
+    const { ended } = await runCancelling(config, (event) => event.type === "step_completed");
+
+    expect(ended.reason).toBe("completed");
+    expect(ended.conversation.at(-1)).toEqual(assistant("All done."));
+  });
+});
+
+// Spec scenario "Every ending" (task 5.3). `lastTurnEnded` checks the
+// invariant on every run in this file already; this table states it in one
+// place, and makes sure each reason really is reached by some setup. Each
+// case uses a tool round trip first where it can, so the conversation has
+// calls and results to get wrong.
+describe("runTurn: the returned conversation is valid whatever the ending", () => {
+  const readFile = () => new ScriptedTool("read_file");
+
+  it.each<[TurnEnded["reason"], () => Promise<TurnEnded>]>([
+    [
+      "completed",
+      async () => {
+        const { config } = setup([askFor(call("a", "read_file")), answer()], {
+          tools: [readFile()],
+        });
+        return (await run(config, "Hi")).ended;
+      },
+    ],
+    [
+      "step_limit",
+      async () => {
+        const { config } = setup([askFor(call("a", "read_file"))], {
+          tools: [readFile()],
+          maxSteps: 1,
+        });
+        return (await run(config, "Hi")).ended;
+      },
+    ],
+    [
+      "max_tokens",
+      async () => {
+        const { config } = setup(
+          [
+            askFor(call("a", "read_file")),
+            { events: [...call("b", "read_file"), completed("max_tokens")] },
+          ],
+          { tools: [readFile()] },
+        );
+        return (await run(config, "Hi")).ended;
+      },
+    ],
+    [
+      "failed",
+      async () => {
+        const { config } = setup(
+          [
+            askFor(call("a", "read_file")),
+            { events: [text("Hal")], ending: { type: "fail", kind: "network" } },
+          ],
+          { tools: [readFile()] },
+        );
+        return (await run(config, "Hi")).ended;
+      },
+    ],
+    [
+      "cancelled",
+      async () => {
+        const { config } = setup([askFor(call("a", "read_file"), call("b", "read_file"))], {
+          tools: [new ScriptedTool("read_file", { run: untilAborted() })],
+        });
+        return (await runCancelling(config, (event) => event.type === "tool_started")).ended;
+      },
+    ],
+  ])("%s", async (reason, endTurn) => {
+    const ended = await endTurn();
+
+    expect(ended.reason).toBe(reason);
+    expectValidConversation(ended.conversation);
   });
 });

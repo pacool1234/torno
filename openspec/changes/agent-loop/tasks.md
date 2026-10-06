@@ -25,9 +25,9 @@ Each group is test-first and sized for one review. The AI stops after each group
 
 ## 5. Cancellation
 
-- [ ] 5.1 Write tests: cancelled before the first request, while streaming, after a completed response before its tools, while a tool runs, at the approval prompt; each checks the conversation invariant; verify they fail
-- [ ] 5.2 Implement them; verify the tests pass
-- [ ] 5.3 Add the invariant test across every ending reason
+- [x] 5.1 Write tests: cancelled before the first request, while streaming, after a completed response before its tools, while a tool runs, at the approval prompt; each checks the conversation invariant; verify they fail
+- [x] 5.2 Implement them; verify the tests pass
+- [x] 5.3 Add the invariant test across every ending reason
 
 ## 6. Close the change
 
