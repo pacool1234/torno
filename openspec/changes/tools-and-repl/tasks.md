@@ -25,8 +25,8 @@ Each group is test-first and sized for one review. The AI stops after each group
 
 ## 5. REPL rendering and approval
 
-- [ ] 5.1 Write tests for rendering each agent event and each turn ending, and for the approval question (default no, y/yes in any case, summary shown); verify they fail
-- [ ] 5.2 Implement them; verify the tests pass
+- [x] 5.1 Write tests for rendering each agent event and each turn ending, and for the approval question (default no, y/yes in any case, summary shown); verify they fail
+- [x] 5.2 Implement them; verify the tests pass
 
 ## 6. The session and the wiring
 
