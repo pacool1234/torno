@@ -15,10 +15,10 @@ The six `model-provider` scenarios handed over by `model-and-provider-port` (its
 
 ## 1. Setup and event-stream parser (`src/adapters/providers/anthropic/`)
 
-- [ ] 1.1 Add `zod` as a runtime dependency; update `openspec/config.yaml` so its context matches the AI-implements rule in `AGENTS.md`
-- [ ] 1.2 Write tests for the event-stream parser: `event` and `data` fields, several `data` lines, comment lines, LF and CRLF, and the same events whether the body arrives whole, one byte at a time, or split inside lines and multi-byte characters; verify they fail
-- [ ] 1.3 Implement the parser (bytes in, `{ event, data }` records out, no I/O); verify the tests pass
-- [ ] 1.4 Request review of group 1
+- [x] 1.1 Add `zod` as a runtime dependency; update `openspec/config.yaml` so its context matches the AI-implements rule in `AGENTS.md`
+- [x] 1.2 Write tests for the event-stream parser: `event` and `data` fields, several `data` lines, comment lines, LF and CRLF, and the same events whether the body arrives whole, one byte at a time, or split inside lines and multi-byte characters; verify they fail
+- [x] 1.3 Implement the parser (bytes in, `{ event, data }` records out, no I/O); verify the tests pass
+- [x] 1.4 Request review of group 1
 
 ## 2. Request mapping and wire schemas
 

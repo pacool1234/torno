@@ -5,6 +5,10 @@ rules:
     - Each task fits in one review (under ~300 lines of change)
     - Tests are listed before the code they cover
 
+# `context` is passed to AI assistants by the openspec tooling. It changed on
+# 2026-10-05 with the rule change in AGENTS.md (the AI now implements tasks).
 context: |
-  The human implements every task by hand; AI assistants must not implement tasks (see AGENTS.md).
-  tasks.md is the human's checklist. Each task includes writing its tests.
+  The AI implements tasks one group at a time, with thorough comments, and stops
+  for the human to review each group before starting the next (see AGENTS.md).
+  The human decides design questions that change a spec, an ADR or a public type.
+  Each task includes writing its tests, and new tests are shown to fail first.
