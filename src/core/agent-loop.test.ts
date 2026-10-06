@@ -1,5 +1,5 @@
 // Tests for runTurn: turns without tools (group 2), tools and approval
-// (group 3).
+// (group 3), limits and failures (group 4).
 // Every test runs offline against ScriptedProvider (ADR-0001), and every test
 // that ends a turn checks the conversation invariant of design D2.
 
@@ -12,7 +12,7 @@ import { expectValidConversation } from "../../test/helpers/valid-conversation.t
 import type { AgentConfig, AgentEvent, TurnEnded } from "./agent.ts";
 import { runTurn } from "./agent-loop.ts";
 import type { Message, ToolCallBlock } from "./conversation.ts";
-import type { StopReason, StreamEvent } from "./ports/model-provider.ts";
+import { ProviderError, type StopReason, type StreamEvent } from "./ports/model-provider.ts";
 
 const USAGE = { inputTokens: 12, outputTokens: 5 };
 
@@ -499,5 +499,148 @@ describe("runTurn: approval", () => {
         (block) => block.type === "tool_result" && block.isError,
       ),
     ).toEqual([true, false]);
+  });
+});
+
+describe("runTurn: the step limit", () => {
+  // Spec scenario "Step limit".
+  it("stops after maxSteps requests, keeping the last step's tool results", async () => {
+    const readFile = new ScriptedTool("read_file");
+    // A third script that must never be used: if the loop made a third
+    // request, the turn would complete instead of hitting the limit.
+    const { provider, config } = setup(
+      [askFor(call("c1", "read_file")), askFor(call("c2", "read_file")), answer()],
+      { tools: [readFile], maxSteps: 2 },
+    );
+
+    const { ended } = await run(config, "Hi");
+
+    expect(provider.requests).toHaveLength(2);
+    expect(readFile.calls).toHaveLength(2);
+    expect(ended.reason).toBe("step_limit");
+    // The conversation ends with step 2's results, so typing "continue"
+    // resumes exactly where the loop stopped.
+    expect(ended.conversation.at(-1)).toEqual({
+      role: "user",
+      content: [
+        { type: "tool_result", toolCallId: "c2", isError: false, result: "read_file done" },
+      ],
+    });
+  });
+
+  it("completes normally when the model answers on the last allowed step", async () => {
+    const { config } = setup([askFor(call("c1", "read_file")), answer()], {
+      tools: [new ScriptedTool("read_file")],
+      maxSteps: 2,
+    });
+
+    const { ended } = await run(config, "Hi");
+
+    expect(ended.reason).toBe("completed");
+  });
+});
+
+describe("runTurn: the output limit", () => {
+  // Spec scenario "Output limit".
+  it("ends with max_tokens, keeping the cut text", async () => {
+    const { provider, config } = setup([{ events: [text("The answer"), completed("max_tokens")] }]);
+
+    const { ended } = await run(config, "Hi");
+
+    expect(ended.reason).toBe("max_tokens");
+    expect(ended.conversation.at(-1)).toEqual(assistant("The answer"));
+    expect(provider.requests).toHaveLength(1);
+  });
+
+  // Complete calls in a cut response aren't run (the model may have meant
+  // more), but each still needs a result for the conversation to be valid.
+  it("doesn't run calls from a cut response, and answers each with an error", async () => {
+    const readFile = new ScriptedTool("read_file");
+    const { config } = setup(
+      [{ events: [...call("c1", "read_file"), text("And then"), completed("max_tokens")] }],
+      { tools: [readFile] },
+    );
+
+    const { events, ended } = await run(config, "Hi");
+
+    const notRun = {
+      type: "tool_result",
+      toolCallId: "c1",
+      isError: true,
+      result: "Not run: the response hit the output limit.",
+    };
+    expect(readFile.calls).toEqual([]);
+    expect(events.some((event) => event.type === "tool_started")).toBe(false);
+    expect(events).toContainEqual({
+      type: "tool_finished",
+      call: callBlock("c1", "read_file"),
+      result: notRun,
+    });
+    expect(ended.reason).toBe("max_tokens");
+    expect(ended.conversation.at(-1)).toEqual({ role: "user", content: [notRun] });
+  });
+});
+
+describe("runTurn: provider failures", () => {
+  // Spec scenario "Failure in the second step".
+  it("ends with failed and the error, keeping finished steps and dropping the failed one", async () => {
+    const { provider, config } = setup(
+      [
+        askFor(call("c1", "read_file")),
+        { events: [text("Half an ans")], ending: { type: "fail", kind: "overloaded" } },
+      ],
+      { tools: [new ScriptedTool("read_file")] },
+    );
+
+    const { events, ended } = await run(config, "Hi");
+
+    expect(ended.reason).toBe("failed");
+    if (ended.reason !== "failed") {
+      return;
+    }
+    expect(ended.error).toBeInstanceOf(ProviderError);
+    expect(ended.error.kind).toBe("overloaded");
+    expect(provider.requests).toHaveLength(2);
+    // The text was shown as it streamed...
+    expect(events).toContainEqual({ type: "text_delta", text: "Half an ans" });
+    // ...but isn't kept (design D2): the conversation ends with step 1's result.
+    expect(ended.conversation).toEqual([
+      user("Hi"),
+      { role: "assistant", content: [callBlock("c1", "read_file")] },
+      {
+        role: "user",
+        content: [
+          { type: "tool_result", toolCallId: "c1", isError: false, result: "read_file done" },
+        ],
+      },
+    ]);
+  });
+
+  // ADR-0007: no retries, even for kinds the port classifies as retryable.
+  it.each(["rate_limit", "overloaded", "network", "timeout", "auth"] as const)(
+    "doesn't retry: %s",
+    async (kind) => {
+      const { provider, config } = setup([
+        { events: [], ending: { type: "fail", kind } },
+        answer(),
+      ]);
+
+      const { ended } = await run(config, "Hi");
+
+      expect(ended.reason).toBe("failed");
+      expect(provider.requests).toHaveLength(1);
+      expect(ended.conversation).toEqual([user("Hi")]);
+    },
+  );
+
+  // Design D1: only bugs throw. ScriptedProvider with no script left throws a
+  // plain Error, which stands in for a bug in an adapter.
+  it("lets an error that isn't a ProviderError propagate", async () => {
+    const { config } = setup([]);
+
+    const { error } = await consume(runTurn(config, [], "Hi", new AbortController().signal));
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(ProviderError);
   });
 });

@@ -20,8 +20,8 @@ Each group is test-first and sized for one review. The AI stops after each group
 
 ## 4. Limits and failures
 
-- [ ] 4.1 Write tests: step limit, output limit (with and without tool calls in the cut response), provider failure in the second step, no retry; verify they fail
-- [ ] 4.2 Implement them; verify the tests pass
+- [x] 4.1 Write tests: step limit, output limit (with and without tool calls in the cut response), provider failure in the second step, no retry; verify they fail
+- [x] 4.2 Implement them; verify the tests pass
 
 ## 5. Cancellation
 

@@ -1,7 +1,7 @@
 // The agent loop (agent-loop change). `runTurn` adds the prompt, runs steps
 // (a model request, then the tools it asked for) and always ends with one
-// `turn_ended` carrying the new conversation (design D1). Limits and failures
-// come in group 4, cancellation in group 5.
+// `turn_ended` carrying the new conversation (design D1). Cancellation comes
+// in group 5.
 
 import type { AgentConfig, AgentEvent } from "./agent.ts";
 import type {
@@ -12,13 +12,19 @@ import type {
   ToolResultBlock,
   UserContentBlock,
 } from "./conversation.ts";
-import type { ProviderRequest, StopReason, Usage } from "./ports/model-provider.ts";
+import {
+  ProviderError,
+  type ProviderRequest,
+  type StopReason,
+  type Usage,
+} from "./ports/model-provider.ts";
 import type { Tool, ToolOutput } from "./ports/tool.ts";
 
 // Results the model reads for calls that weren't run normally. Fixed texts,
 // written for the model: it should understand what happened and react (try
 // another tool, ask the user) rather than retry blindly.
 const DENIED = "The user denied this tool call.";
+const NOT_RUN_OUTPUT_LIMIT = "Not run: the response hit the output limit.";
 
 export async function* runTurn(
   config: AgentConfig,
@@ -34,12 +40,46 @@ export async function* runTurn(
   const tools = new Map(config.tools.map((tool) => [tool.definition.name, tool]));
 
   for (let step = 1; ; step += 1) {
-    const response = yield* streamStep(config, messages, signal, step);
+    let response: StepResponse;
+    try {
+      response = yield* streamStep(config, messages, signal, step);
+    } catch (error: unknown) {
+      // A provider failure is an expected outcome (design D1): it ends the
+      // turn as a reason. Nothing from this step has been added to
+      // `messages` yet, so the step in progress is dropped and every finished
+      // step stays (design D2). No retry (ADR-0007): the user decides.
+      // Anything else is a bug and propagates.
+      if (error instanceof ProviderError) {
+        yield { type: "turn_ended", reason: "failed", error, conversation: messages };
+        return;
+      }
+      throw error;
+    }
+
     if (isNonEmpty(response.content)) {
       messages.push({ role: "assistant", content: response.content });
     }
 
     const calls = response.content.filter((block) => block.type === "tool_call");
+
+    // Design D4: a response cut by the output limit ends the turn. Its text is
+    // kept (already pushed above). Its complete calls are not run, since the
+    // model may have meant to say more, but each still gets a result:
+    // without one, the conversation couldn't be sent again (design D2).
+    if (response.stopReason === "max_tokens") {
+      const results: ToolResultBlock[] = [];
+      for (const call of calls) {
+        const result = notRun(call, NOT_RUN_OUTPUT_LIMIT);
+        yield { type: "tool_finished", call, result };
+        results.push(result);
+      }
+      if (isNonEmpty(results)) {
+        messages.push({ role: "user", content: results });
+      }
+      yield { type: "turn_ended", reason: "max_tokens", conversation: messages };
+      return;
+    }
+
     // Tools run only when the model stopped *in order to* use them. Any other
     // stop reason means its turn is over; "tool_use" with no complete call
     // leaves nothing to run, so the turn ends too.
@@ -58,7 +98,19 @@ export async function* runTurn(
     // All of the step's results in one user message (ADR-0007), in call
     // order: a message per result would put two user messages in a row.
     messages.push({ role: "user", content: nonEmptyCopy(results) });
+
+    // Design D4: the limit is checked after the step's tools ran, so their
+    // results are kept and "continue" picks up exactly here. Checked before
+    // the next request, so the model is called at most maxSteps times.
+    if (step >= config.maxSteps) {
+      yield { type: "turn_ended", reason: "step_limit", conversation: messages };
+      return;
+    }
   }
+}
+
+function notRun(call: ToolCallBlock, reason: string): ToolResultBlock {
+  return { type: "tool_result", toolCallId: call.id, isError: true, result: reason };
 }
 
 // Runs one tool call and reports it: "tool_started" right before the tool
