@@ -105,7 +105,7 @@ A content block of any type other than `text` and `tool_use` (such as `thinking`
 
 ### Requirement: Completion, stop reason and usage
 
-When `message_stop` arrives, the provider SHALL emit one completion event and end the stream, without reading further. The stop reason SHALL be the last `stop_reason` received, mapped as: `end_turn`, `tool_use` and `max_tokens` unchanged; anything else to `other`. Usage SHALL take input tokens and, when present, cache read and cache write tokens from `message_start`, and output tokens from the last `message_delta`.
+When `message_stop` arrives, the provider SHALL emit one completion event and end the stream, without reading further. The stop reason SHALL be the last `stop_reason` received, mapped as: `end_turn`, `tool_use` and `max_tokens` unchanged; anything else to `other`. Usage SHALL take each count (input, output, cache read, cache write) from the last event that reports it: `message_start` first, then each `message_delta` in order, whose counts are running totals. A cache count that no event reports (absent or null) SHALL be omitted.
 
 #### Scenario: Output limit reached
 
@@ -117,9 +117,14 @@ When `message_stop` arrives, the provider SHALL emit one completion event and en
 - **WHEN** `message_start` reports 50 input tokens, 0 cache read tokens and 1000 cache write tokens, and the last `message_delta` reports 20 output tokens
 - **THEN** usage is 50 input, 20 output, 0 cache read and 1000 cache write tokens
 
+#### Scenario: Later counts replace earlier ones
+
+- **WHEN** `message_start` reports 6 input tokens and no cache fields, and the last `message_delta` reports 22 input tokens, 0 cache read tokens and 6 output tokens (as Ollama does)
+- **THEN** usage is 22 input, 6 output and 0 cache read tokens, with no cache write count
+
 #### Scenario: No cache information
 
-- **WHEN** `message_start` reports input tokens but no cache fields (as Ollama does)
+- **WHEN** no event reports a cache field
 - **THEN** usage has no cache counts
 
 #### Scenario: Other stop reasons

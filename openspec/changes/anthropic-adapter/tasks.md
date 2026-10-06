@@ -22,13 +22,13 @@ The six `model-provider` scenarios handed over by `model-and-provider-port` (its
 
 ## 2. Request mapping and wire schemas
 
-- [ ] 2.1 Write tests for the spec's request scenarios (minimal request, tool call and tool result mapping, tool definitions, no API key) and for the headers; verify they fail
-- [ ] 2.2 Implement the canonical-to-Anthropic request mapping and headers; define Zod schemas for the wire events the translator uses
-- [ ] 2.3 Request review of group 2
+- [x] 2.1 Write tests for the spec's request scenarios (minimal request, tool call and tool result mapping, tool definitions, no API key) and for the headers; verify they fail
+- [x] 2.2 Implement the canonical-to-Anthropic request mapping and headers; define Zod schemas for the wire events the translator uses
+- [x] 2.3 Request review of group 2
 
 ## 3. Stream translation (Anthropic events → canonical events)
 
-- [ ] 3.1 Write tests with hand-written event sequences for: text fragments and empty deltas; tool input split across fragments, empty input as `{}`, malformed input as `protocol`; skipped `thinking` blocks counted; stop reasons, including `stop_sequence` → `other`; usage with and without cache fields; `ping` and unknown events ignored; malformed event data as `protocol`; `error` events mapped by type; a stream that ends before `message_stop` as `network`; nothing read after `message_stop`. Verify they fail
+- [ ] 3.1 Write tests with hand-written event sequences for: text fragments and empty deltas; tool input split across fragments, empty input as `{}`, malformed input as `protocol`; skipped `thinking` blocks counted; stop reasons, including `stop_sequence` → `other`; usage with and without cache fields, and later counts replacing earlier ones; `ping` and unknown events ignored; malformed event data as `protocol`; `error` events mapped by type; a stream that ends before `message_stop` as `network`; nothing read after `message_stop`. Verify they fail
 - [ ] 3.2 Implement the translator as a pure function over parsed events; verify the tests pass
 - [ ] 3.3 Request review of group 3
 
