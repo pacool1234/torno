@@ -15,8 +15,8 @@ Each group is test-first and sized for one review. The AI stops after each group
 
 ## 3. Tools and approval
 
-- [ ] 3.1 Write tests: one call, two calls in order with one result message, second step sees the results, unknown tool, tool throws, read without asking, approved call, denied call; verify they fail
-- [ ] 3.2 Implement tool execution and approval; verify the tests pass
+- [x] 3.1 Write tests: one call, two calls in order with one result message, second step sees the results, unknown tool, tool throws, read without asking, approved call, denied call; verify they fail
+- [x] 3.2 Implement tool execution and approval; verify the tests pass
 
 ## 4. Limits and failures
 

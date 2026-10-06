@@ -1,15 +1,24 @@
-// The agent loop (agent-loop change). Group 2: one step, no tools yet. The
-// shape is the final one: `runTurn` adds the prompt, runs steps, and always
-// ends with one `turn_ended` carrying the new conversation (design D1).
+// The agent loop (agent-loop change). `runTurn` adds the prompt, runs steps
+// (a model request, then the tools it asked for) and always ends with one
+// `turn_ended` carrying the new conversation (design D1). Limits and failures
+// come in group 4, cancellation in group 5.
 
 import type { AgentConfig, AgentEvent } from "./agent.ts";
 import type {
   AssistantContentBlock,
   Message,
   NonEmptyArray,
+  ToolCallBlock,
+  ToolResultBlock,
   UserContentBlock,
 } from "./conversation.ts";
 import type { ProviderRequest, StopReason, Usage } from "./ports/model-provider.ts";
+import type { Tool, ToolOutput } from "./ports/tool.ts";
+
+// Results the model reads for calls that weren't run normally. Fixed texts,
+// written for the model: it should understand what happened and react (try
+// another tool, ask the user) rather than retry blindly.
+const DENIED = "The user denied this tool call.";
 
 export async function* runTurn(
   config: AgentConfig,
@@ -21,12 +30,89 @@ export async function* runTurn(
   // (design D1: the caller owns its conversation and keeps the one returned).
   const messages: Message[] = withPrompt(conversation, prompt);
 
-  const step = 1;
-  const response = yield* streamStep(config, messages, signal, step);
-  if (isNonEmpty(response.content)) {
-    messages.push({ role: "assistant", content: response.content });
+  // Looked up by name for every call; built once per turn.
+  const tools = new Map(config.tools.map((tool) => [tool.definition.name, tool]));
+
+  for (let step = 1; ; step += 1) {
+    const response = yield* streamStep(config, messages, signal, step);
+    if (isNonEmpty(response.content)) {
+      messages.push({ role: "assistant", content: response.content });
+    }
+
+    const calls = response.content.filter((block) => block.type === "tool_call");
+    // Tools run only when the model stopped *in order to* use them. Any other
+    // stop reason means its turn is over; "tool_use" with no complete call
+    // leaves nothing to run, so the turn ends too.
+    if (response.stopReason !== "tool_use" || !isNonEmpty(calls)) {
+      yield { type: "turn_ended", reason: "completed", conversation: messages };
+      return;
+    }
+
+    // One at a time, in the model's order (ADR-0007). A `for` loop with
+    // `await` inside is what makes it sequential; `Promise.all` would start
+    // them all at once, which is the deferred "parallel tool calls".
+    const results: ToolResultBlock[] = [];
+    for (const call of calls) {
+      results.push(yield* runCall(config, tools, call, signal));
+    }
+    // All of the step's results in one user message (ADR-0007), in call
+    // order: a message per result would put two user messages in a row.
+    messages.push({ role: "user", content: nonEmptyCopy(results) });
   }
-  yield { type: "turn_ended", reason: "completed", conversation: messages };
+}
+
+// Runs one tool call and reports it: "tool_started" right before the tool
+// runs (so never for a call that doesn't run), then "tool_finished" with the
+// result, always. Every outcome becomes a result the model can read; nothing
+// here throws for a tool's failure.
+async function* runCall(
+  config: AgentConfig,
+  tools: ReadonlyMap<string, Tool>,
+  call: ToolCallBlock,
+  signal: AbortSignal,
+): AsyncGenerator<AgentEvent, ToolResultBlock> {
+  const finish = (output: ToolOutput): ToolResultBlock => ({
+    type: "tool_result",
+    toolCallId: call.id,
+    isError: output.isError,
+    result: output.result,
+  });
+
+  const tool = tools.get(call.toolName);
+  if (tool === undefined) {
+    // Listing the real names lets the model correct a typo or a guessed name
+    // on its next try (spec "Unknown tool").
+    const available = [...tools.keys()].join(", ") || "none";
+    const result = finish({
+      result: `Unknown tool "${call.toolName}". Available tools: ${available}.`,
+      isError: true,
+    });
+    yield { type: "tool_finished", call, result };
+    return result;
+  }
+
+  // Design D3: approval happens here, in the loop, so it's visible in the
+  // events and the same for every tool.
+  if (tool.needsApproval && (await config.approver.approve(call, signal)) === "deny") {
+    const result = finish({ result: DENIED, isError: true });
+    yield { type: "tool_finished", call, result };
+    return result;
+  }
+
+  yield { type: "tool_started", call };
+  let output: ToolOutput;
+  try {
+    output = await tool.execute(call.input, signal);
+  } catch (error: unknown) {
+    // A tool that throws is reported to the model like any failure (spec
+    // "Tool throws"). `unknown`, not `Error`: JavaScript can throw anything,
+    // so a thrown string must still produce a readable message.
+    const message = error instanceof Error ? error.message : String(error);
+    output = { result: `The tool failed: ${message}`, isError: true };
+  }
+  const result = finish(output);
+  yield { type: "tool_finished", call, result };
+  return result;
 }
 
 // Adds the prompt so that roles keep alternating (design D2). After a turn

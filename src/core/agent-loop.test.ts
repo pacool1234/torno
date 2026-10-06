@@ -1,4 +1,5 @@
-// Tests for runTurn, group 2 of the agent-loop change: turns without tools.
+// Tests for runTurn: turns without tools (group 2), tools and approval
+// (group 3).
 // Every test runs offline against ScriptedProvider (ADR-0001), and every test
 // that ends a turn checks the conversation invariant of design D2.
 
@@ -10,7 +11,7 @@ import { ScriptedTool } from "../../test/helpers/scripted-tool.ts";
 import { expectValidConversation } from "../../test/helpers/valid-conversation.ts";
 import type { AgentConfig, AgentEvent, TurnEnded } from "./agent.ts";
 import { runTurn } from "./agent-loop.ts";
-import type { Message } from "./conversation.ts";
+import type { Message, ToolCallBlock } from "./conversation.ts";
 import type { StopReason, StreamEvent } from "./ports/model-provider.ts";
 
 const USAGE = { inputTokens: 12, outputTokens: 5 };
@@ -62,6 +63,26 @@ function lastTurnEnded(events: AgentEvent[]): TurnEnded {
   expectValidConversation(last.conversation);
   return last;
 }
+
+// The two events a provider emits for one tool call: announced, then complete.
+const call = (id: string, toolName: string, input: Record<string, unknown> = {}): StreamEvent[] => [
+  { type: "tool_call_started", id, toolName },
+  { type: "tool_call_completed", call: { type: "tool_call", id, toolName, input } },
+];
+const callBlock = (
+  id: string,
+  toolName: string,
+  input: Record<string, unknown> = {},
+): ToolCallBlock => ({ type: "tool_call", id, toolName, input });
+
+// A step that asks for the given calls, and a final step that just answers.
+const askFor = (...calls: StreamEvent[][]): Script => ({
+  events: [...calls.flat(), completed("tool_use")],
+});
+const answer = (fragment = "Done."): Script => ({ events: [text(fragment), completed()] });
+
+const resultsMessage = (request: { messages: readonly Message[] } | undefined) =>
+  request?.messages.at(-1);
 
 const user = (textValue: string): Message => ({
   role: "user",
@@ -206,5 +227,277 @@ describe("runTurn: the request sent to the model", () => {
     await run(config, "Hi", history);
 
     expect(history).toEqual(before);
+  });
+});
+
+describe("runTurn: tool calls", () => {
+  it("runs a call, sends its result back, and lets the model answer", async () => {
+    const readFile = new ScriptedTool("read_file", {
+      run: () => ({ result: "file contents", isError: false }),
+    });
+    const { config } = setup(
+      [
+        {
+          events: [
+            text("Let me look."),
+            ...call("c1", "read_file", { path: "a.ts" }),
+            completed("tool_use"),
+          ],
+        },
+        answer("It's empty."),
+      ],
+      { tools: [readFile] },
+    );
+
+    const { events, ended } = await run(config, "What's in a.ts?");
+
+    const c1 = callBlock("c1", "read_file", { path: "a.ts" });
+    const c1Result = {
+      type: "tool_result",
+      toolCallId: "c1",
+      isError: false,
+      result: "file contents",
+    };
+    expect(events.map((event) => event.type)).toEqual([
+      "text_delta",
+      "tool_call_started",
+      "step_completed",
+      "tool_started",
+      "tool_finished",
+      "text_delta",
+      "step_completed",
+      "turn_ended",
+    ]);
+    expect(events).toContainEqual({ type: "tool_started", call: c1 });
+    expect(events).toContainEqual({ type: "tool_finished", call: c1, result: c1Result });
+    expect(
+      events.filter((event) => event.type === "step_completed").map((event) => event.step),
+    ).toEqual([1, 2]);
+    expect(ended.reason).toBe("completed");
+    // The text before the call stays before it, in one assistant message.
+    expect(ended.conversation).toEqual([
+      user("What's in a.ts?"),
+      { role: "assistant", content: [{ type: "text", text: "Let me look." }, c1] },
+      { role: "user", content: [c1Result] },
+      assistant("It's empty."),
+    ]);
+  });
+
+  it("passes the call's input and the turn's signal to the tool", async () => {
+    const readFile = new ScriptedTool("read_file");
+    const { config } = setup([askFor(call("c1", "read_file", { path: "a.ts" })), answer()], {
+      tools: [readFile],
+    });
+    const signal = new AbortController().signal;
+
+    await run(config, "Hi", [], signal);
+
+    expect(readFile.calls).toEqual([{ input: { path: "a.ts" }, signal }]);
+    expect(readFile.calls[0]?.signal).toBe(signal);
+  });
+
+  // Spec scenario "Second step sees the tool results".
+  it("sends the call and its result in the next request", async () => {
+    const readFile = new ScriptedTool("read_file", {
+      run: () => ({ result: "file contents", isError: false }),
+    });
+    const { provider, config } = setup([askFor(call("c1", "read_file")), answer()], {
+      tools: [readFile],
+    });
+
+    await run(config, "Hi");
+
+    expect(provider.requests[1]?.messages.slice(-2)).toEqual([
+      { role: "assistant", content: [callBlock("c1", "read_file")] },
+      {
+        role: "user",
+        content: [
+          { type: "tool_result", toolCallId: "c1", isError: false, result: "file contents" },
+        ],
+      },
+    ]);
+  });
+
+  // Spec scenario "Two calls in one step" (ADR-0007: sequential, one message).
+  it("runs two calls one after the other, in order, and answers both in one message", async () => {
+    const log: string[] = [];
+    const slow = new ScriptedTool("slow", {
+      log,
+      // Finishes on a later tick: if the loop started B without awaiting A,
+      // "fast:start" would appear before "slow:end".
+      run: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        return { result: "A", isError: false };
+      },
+    });
+    const fast = new ScriptedTool("fast", { log, run: () => ({ result: "B", isError: false }) });
+    const { provider, config } = setup([askFor(call("a", "slow"), call("b", "fast")), answer()], {
+      tools: [slow, fast],
+    });
+
+    await run(config, "Hi");
+
+    expect(log).toEqual(["slow:start", "slow:end", "fast:start", "fast:end"]);
+    expect(resultsMessage(provider.requests[1])).toEqual({
+      role: "user",
+      content: [
+        { type: "tool_result", toolCallId: "a", isError: false, result: "A" },
+        { type: "tool_result", toolCallId: "b", isError: false, result: "B" },
+      ],
+    });
+  });
+
+  it("passes a tool's own error result through unchanged", async () => {
+    const readFile = new ScriptedTool("read_file", {
+      run: () => ({ result: "No such file: a.ts", isError: true }),
+    });
+    const { provider, config } = setup([askFor(call("c1", "read_file")), answer()], {
+      tools: [readFile],
+    });
+
+    await run(config, "Hi");
+
+    expect(resultsMessage(provider.requests[1])?.content).toEqual([
+      { type: "tool_result", toolCallId: "c1", isError: true, result: "No such file: a.ts" },
+    ]);
+  });
+
+  // Spec scenario "Unknown tool".
+  it("answers a call to an unknown tool with an error, without running anything", async () => {
+    const readFile = new ScriptedTool("read_file");
+    const { provider, config } = setup([askFor(call("c1", "delete_everything")), answer()], {
+      tools: [readFile],
+    });
+
+    const { events, ended } = await run(config, "Hi");
+
+    expect(readFile.calls).toEqual([]);
+    expect(events.some((event) => event.type === "tool_started")).toBe(false);
+    const [result] = resultsMessage(provider.requests[1])?.content ?? [];
+    expect(result).toMatchObject({ type: "tool_result", toolCallId: "c1", isError: true });
+    expect(result?.type === "tool_result" && result.result).toContain("delete_everything");
+    expect(provider.requests).toHaveLength(2);
+    expect(ended.reason).toBe("completed");
+  });
+
+  // Spec scenario "Tool throws".
+  it.each([
+    ["an Error", new Error("disk full")],
+    ["a non-Error value", "disk full"],
+  ])("answers with an error result when the tool throws %s", async (_name, thrown) => {
+    const writeFile = new ScriptedTool("write_file", {
+      run: () => {
+        // Deliberate: JavaScript can throw any value, and the loop must cope
+        // with a non-Error one too, so this test throws a plain string.
+        // eslint-disable-next-line @typescript-eslint/only-throw-error
+        throw thrown;
+      },
+    });
+    const { provider, config } = setup([askFor(call("c1", "write_file")), answer()], {
+      tools: [writeFile],
+    });
+
+    const { events } = await run(config, "Hi");
+
+    const finished = events.find((event) => event.type === "tool_finished");
+    expect(finished?.result.isError).toBe(true);
+    // Exact text: the same message whatever was thrown, with no "Error: "
+    // prefix that String(error) would add for an Error object.
+    expect(finished?.result.result).toBe("The tool failed: disk full");
+    expect(provider.requests).toHaveLength(2);
+  });
+
+  // A "tool_use" stop reason with no complete call is a provider quirk; there
+  // is nothing to run, so the turn simply ends (design, "Choices that follow").
+  it("ends the turn when the stop reason is tool_use but there are no calls", async () => {
+    const { provider, config } = setup([{ events: [text("Hmm."), completed("tool_use")] }]);
+
+    const { ended } = await run(config, "Hi");
+
+    expect(ended.reason).toBe("completed");
+    expect(provider.requests).toHaveLength(1);
+  });
+});
+
+describe("runTurn: approval", () => {
+  // Spec scenario "Read without asking".
+  it("runs a tool that doesn't need approval without asking", async () => {
+    const approver = new ScriptedApprover();
+    const readFile = new ScriptedTool("read_file", { needsApproval: false });
+    const { config } = setup([askFor(call("c1", "read_file")), answer()], {
+      tools: [readFile],
+      approver,
+    });
+
+    await run(config, "Hi");
+
+    expect(approver.asked).toEqual([]);
+    expect(readFile.calls).toHaveLength(1);
+  });
+
+  it("asks before a tool that needs approval, with the call and the signal, and runs it when approved", async () => {
+    const signals: AbortSignal[] = [];
+    const approver = new ScriptedApprover((_call, signal) => {
+      signals.push(signal);
+      return "approve";
+    });
+    const bash = new ScriptedTool("bash", { needsApproval: true });
+    const { config } = setup([askFor(call("c1", "bash", { command: "ls" })), answer()], {
+      tools: [bash],
+      approver,
+    });
+    const signal = new AbortController().signal;
+
+    await run(config, "Hi", [], signal);
+
+    expect(approver.asked).toEqual([callBlock("c1", "bash", { command: "ls" })]);
+    expect(signals[0]).toBe(signal);
+    expect(bash.calls).toHaveLength(1);
+  });
+
+  // Spec scenario "Denied call".
+  it("doesn't run a denied call, tells the model, and continues", async () => {
+    const bash = new ScriptedTool("bash", { needsApproval: true });
+    const { provider, config } = setup([askFor(call("c1", "bash")), answer()], {
+      tools: [bash],
+      approver: new ScriptedApprover(() => "deny"),
+    });
+
+    const { events, ended } = await run(config, "Hi");
+
+    const denied = {
+      type: "tool_result",
+      toolCallId: "c1",
+      isError: true,
+      result: "The user denied this tool call.",
+    };
+    expect(bash.calls).toEqual([]);
+    expect(events.some((event) => event.type === "tool_started")).toBe(false);
+    expect(events).toContainEqual({
+      type: "tool_finished",
+      call: callBlock("c1", "bash"),
+      result: denied,
+    });
+    expect(resultsMessage(provider.requests[1])?.content).toEqual([denied]);
+    expect(ended.reason).toBe("completed");
+  });
+
+  it("asks about each call separately, and a denial doesn't stop the next call", async () => {
+    const approver = new ScriptedApprover((asked) => (asked.id === "a" ? "deny" : "approve"));
+    const bash = new ScriptedTool("bash", { needsApproval: true });
+    const { provider, config } = setup([askFor(call("a", "bash"), call("b", "bash")), answer()], {
+      tools: [bash],
+      approver,
+    });
+
+    await run(config, "Hi");
+
+    expect(approver.asked.map((asked) => asked.id)).toEqual(["a", "b"]);
+    expect(bash.calls).toHaveLength(1);
+    expect(
+      resultsMessage(provider.requests[1])?.content.map(
+        (block) => block.type === "tool_result" && block.isError,
+      ),
+    ).toEqual([true, false]);
   });
 });
