@@ -17,7 +17,7 @@ The REPL SHALL read a line, run one turn with it, and read the next line when th
 
 ### Requirement: Events are rendered as they arrive
 
-The REPL SHALL write streamed text as it arrives, a line when a tool starts (its name and a short summary), a line when it finishes (ok, or the first line of its error), and, when the turn ends with any reason other than `completed`, one line saying how it ended: `cancelled`; a step-limit line suggesting "continue"; an output-limit line; or the error's kind and message.
+The REPL SHALL write streamed text as it arrives, a line when a tool starts (its name and a short summary), a line when it finishes (ok, or the first non-empty line of its error), and, when the turn ends with any reason other than `completed`, one line saying how it ended: `cancelled`; a step-limit line suggesting "continue"; an output-limit line; or the error's kind and message.
 
 #### Scenario: Failure is shown
 

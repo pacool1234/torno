@@ -90,6 +90,13 @@ describe("Renderer: tools", () => {
     );
   });
 
+  // npm starts its output with an empty line: the first line alone would
+  // show a bare "✗", saying nothing about what failed.
+  it("shows the first non-empty line of an error", () => {
+    expect(renderAll(finished("bash", "\n> test\n> node --test\n", true))).toBe("  ✗ > test\n");
+    expect(renderAll(finished("bash", "  \r\n\nboom", true))).toBe("  ✗ boom\n");
+  });
+
   // Streamed text usually stops mid-line; a tool line must start on its own.
   it("starts a tool line on a new line after text that didn't end one", () => {
     expect(

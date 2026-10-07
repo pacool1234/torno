@@ -29,7 +29,7 @@ export class Renderer {
         return this.line(visible(`→ ${event.call.toolName}: ${mainArgument(event.call)}`));
       case "tool_finished":
         return this.line(
-          event.result.isError ? `  ✗ ${visible(firstLine(event.result.result))}` : "  ✓ done",
+          event.result.isError ? `  ✗ ${visible(firstTextLine(event.result.result))}` : "  ✓ done",
         );
       case "turn_ended":
         return this.ending(event);
@@ -101,6 +101,17 @@ function shorten(text: string): string {
 // too, rather than leaving its carriage return behind.
 function firstLine(text: string): string {
   return text.split(/\r?\n/, 1)[0] ?? "";
+}
+
+// The first line with something on it, trimmed: tools often start their
+// output with a blank line (npm does), and a bare "✗" says nothing.
+function firstTextLine(text: string): string {
+  return (
+    text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find((line) => line !== "") ?? ""
+  );
 }
 
 // What a terminal would obey rather than show (spec "Control characters are
